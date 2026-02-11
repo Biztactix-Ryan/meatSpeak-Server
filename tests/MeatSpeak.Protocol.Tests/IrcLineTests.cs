@@ -174,4 +174,31 @@ public class IrcLineTests
         Assert.Equal("PING", msg.Command);
         Assert.Empty(msg.Parameters);
     }
+
+    [Fact]
+    public void EmptyTags_ReturnsFalse()
+    {
+        // @ followed by space (empty tags) should be rejected
+        var result = Parse("@ PRIVMSG #channel :msg", out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void EmptyPrefix_ReturnsFalse()
+    {
+        // : followed by space (empty prefix) should be rejected
+        var result = Parse(": JOIN #channel", out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void EmptyTagsAndPrefix_ReturnsFalse()
+    {
+        // Both empty tags and prefix should be rejected
+        var result = Parse("@ : PRIVMSG #channel :msg", out _);
+
+        Assert.False(result);
+    }
 }

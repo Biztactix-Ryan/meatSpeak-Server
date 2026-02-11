@@ -21,6 +21,7 @@ public static class IrcLine
             remaining = remaining[1..]; // skip @
             int spaceIdx = remaining.IndexOf(IrcConstants.Space);
             if (spaceIdx < 0) return false;
+            if (spaceIdx == 0) return false; // Empty tags are invalid
             parts.Tags = remaining[..spaceIdx];
             remaining = remaining[(spaceIdx + 1)..];
             // Skip extra spaces
@@ -34,6 +35,7 @@ public static class IrcLine
             remaining = remaining[1..]; // skip :
             int spaceIdx = remaining.IndexOf(IrcConstants.Space);
             if (spaceIdx < 0) return false;
+            if (spaceIdx == 0) return false; // Empty prefix is invalid
             parts.Prefix = remaining[..spaceIdx];
             remaining = remaining[(spaceIdx + 1)..];
             while (remaining.Length > 0 && remaining[0] == IrcConstants.Space)
