@@ -4,14 +4,22 @@ using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data.Entities;
+using MeatSpeak.Server.Data.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 
 public sealed class NoticeHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly IServiceScopeFactory? _scopeFactory;
     public string Command => IrcConstants.NOTICE;
     public SessionState MinimumState => SessionState.Registered;
 
-    public NoticeHandler(IServer server) => _server = server;
+    public NoticeHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    {
+        _server = server;
+        _scopeFactory = scopeFactory;
+    }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -33,12 +41,36 @@ public sealed class NoticeHandler : ICommandHandler
                 if (targetSession != null)
                     await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.NOTICE, target, text);
             }
+
+            await LogMessageAsync(session.Info.Nickname!, target, null, text, ct);
         }
         else
         {
             var targetSession = _server.FindSessionByNick(target);
             if (targetSession != null)
                 await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.NOTICE, target, text);
+
+            await LogMessageAsync(session.Info.Nickname!, null, target, text, ct);
         }
+    }
+
+    private async ValueTask LogMessageAsync(string sender, string? channel, string? target, string text, CancellationToken ct)
+    {
+        if (_scopeFactory == null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var chatLogs = scope.ServiceProvider.GetRequiredService<IChatLogRepository>();
+            await chatLogs.AddAsync(new ChatLogEntity
+            {
+                ChannelName = channel,
+                Target = target,
+                Sender = sender,
+                Message = text,
+                MessageType = "NOTICE",
+                SentAt = DateTimeOffset.UtcNow,
+            }, ct);
+        }
+        catch { /* DB logging failure should not break messaging */ }
     }
 }

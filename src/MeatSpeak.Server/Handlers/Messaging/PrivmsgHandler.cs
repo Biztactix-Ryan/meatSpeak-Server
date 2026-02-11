@@ -5,14 +5,22 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Data.Entities;
+using MeatSpeak.Server.Data.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 
 public sealed class PrivmsgHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly IServiceScopeFactory? _scopeFactory;
     public string Command => IrcConstants.PRIVMSG;
     public SessionState MinimumState => SessionState.Registered;
 
-    public PrivmsgHandler(IServer server) => _server = server;
+    public PrivmsgHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    {
+        _server = server;
+        _scopeFactory = scopeFactory;
+    }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -52,6 +60,8 @@ public sealed class PrivmsgHandler : ICommandHandler
                     await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
             }
             _server.Events.Publish(new ChannelMessageEvent(session.Id, session.Info.Nickname!, target, text));
+
+            await LogMessageAsync(session.Info.Nickname!, target, null, text, "PRIVMSG", ct);
         }
         else
         {
@@ -65,6 +75,28 @@ public sealed class PrivmsgHandler : ICommandHandler
             }
             await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
             _server.Events.Publish(new PrivateMessageEvent(session.Id, session.Info.Nickname!, target, text));
+
+            await LogMessageAsync(session.Info.Nickname!, null, target, text, "PRIVMSG", ct);
         }
+    }
+
+    private async ValueTask LogMessageAsync(string sender, string? channel, string? target, string text, string type, CancellationToken ct)
+    {
+        if (_scopeFactory == null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var chatLogs = scope.ServiceProvider.GetRequiredService<IChatLogRepository>();
+            await chatLogs.AddAsync(new ChatLogEntity
+            {
+                ChannelName = channel,
+                Target = target,
+                Sender = sender,
+                Message = text,
+                MessageType = type,
+                SentAt = DateTimeOffset.UtcNow,
+            }, ct);
+        }
+        catch { /* DB logging failure should not break messaging */ }
     }
 }

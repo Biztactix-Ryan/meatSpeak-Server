@@ -5,14 +5,22 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data.Entities;
+using MeatSpeak.Server.Data.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 
 public sealed class TopicHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly IServiceScopeFactory? _scopeFactory;
     public string Command => IrcConstants.TOPIC;
     public SessionState MinimumState => SessionState.Registered;
 
-    public TopicHandler(IServer server) => _server = server;
+    public TopicHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    {
+        _server = server;
+        _scopeFactory = scopeFactory;
+    }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -86,5 +94,40 @@ public sealed class TopicHandler : ICommandHandler
         }
 
         _server.Events.Publish(new TopicChangedEvent(channelName, newTopic, session.Info.Nickname!));
+
+        // Persist topic change to database
+        await PersistTopicChangeAsync(channelName, newTopic, session.Info.Nickname!, ct);
+    }
+
+    private async ValueTask PersistTopicChangeAsync(string channelName, string topic, string setBy, CancellationToken ct)
+    {
+        if (_scopeFactory == null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var channels = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+            var topicHistory = scope.ServiceProvider.GetRequiredService<ITopicHistoryRepository>();
+
+            // Update channel entity
+            await channels.UpsertAsync(new ChannelEntity
+            {
+                Id = Guid.NewGuid(),
+                Name = channelName,
+                Topic = topic,
+                TopicSetBy = setBy,
+                TopicSetAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+            }, ct);
+
+            // Add topic history entry
+            await topicHistory.AddAsync(new TopicHistoryEntity
+            {
+                ChannelName = channelName,
+                Topic = topic,
+                SetBy = setBy,
+                SetAt = DateTimeOffset.UtcNow,
+            }, ct);
+        }
+        catch { /* DB persistence failure should not break topic changes */ }
     }
 }

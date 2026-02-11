@@ -5,14 +5,21 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 
 public sealed class PartHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly IServiceScopeFactory? _scopeFactory;
     public string Command => IrcConstants.PART;
     public SessionState MinimumState => SessionState.Registered;
 
-    public PartHandler(IServer server) => _server = server;
+    public PartHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    {
+        _server = server;
+        _scopeFactory = scopeFactory;
+    }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -62,10 +69,27 @@ public sealed class PartHandler : ICommandHandler
             channel.RemoveMember(session.Info.Nickname!);
             session.Info.Channels.Remove(name);
 
-            if (channel.Members.Count == 0)
+            var channelRemoved = channel.Members.Count == 0;
+            if (channelRemoved)
                 _server.RemoveChannel(name);
 
             _server.Events.Publish(new ChannelPartedEvent(session.Id, session.Info.Nickname!, name, reason));
+
+            // Delete channel from database when it becomes empty
+            if (channelRemoved)
+                await DeleteChannelAsync(name);
         }
+    }
+
+    private async ValueTask DeleteChannelAsync(string name)
+    {
+        if (_scopeFactory == null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var channels = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+            await channels.DeleteAsync(name);
+        }
+        catch { /* DB persistence failure should not break channel operations */ }
     }
 }

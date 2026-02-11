@@ -10,6 +10,7 @@ using MeatSpeak.Server.Core.Modes;
 using MeatSpeak.Server.Core.Capabilities;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Repositories;
 using MeatSpeak.Server.Events;
 using MeatSpeak.Server.Numerics;
@@ -28,6 +29,7 @@ using MeatSpeak.Server.Handlers.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -113,6 +115,37 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton<CapabilityRegistry>();
 
+// Database — defaults to SQLite if nothing is configured
+var dbConfig = config.Database;
+var dbConnectionString = dbConfig.ConnectionString;
+builder.Services.AddDbContext<MeatSpeakDbContext>(options =>
+{
+    switch (dbConfig.Provider.ToLowerInvariant())
+    {
+        case "postgresql":
+        case "postgres":
+            options.UseNpgsql(dbConnectionString);
+            break;
+        case "mysql":
+        case "mariadb":
+            options.UseMySql(dbConnectionString!, ServerVersion.AutoDetect(dbConnectionString!));
+            break;
+        default: // "sqlite" or anything else
+            options.UseSqlite(dbConnectionString ?? "Data Source=meatspeak.db");
+            break;
+    }
+});
+builder.Services.AddScoped<IBanRepository, BanRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IChannelRepository, ChannelRepository>();
+builder.Services.AddScoped<ITopicHistoryRepository, TopicHistoryRepository>();
+builder.Services.AddScoped<IUserHistoryRepository, UserHistoryRepository>();
+builder.Services.AddScoped<IChatLogRepository, ChatLogRepository>();
+builder.Services.AddScoped<IPermissionService>(sp =>
+    new PermissionService(sp.GetRequiredService<MeatSpeakDbContext>(), config.OwnerAccount));
+builder.Services.AddScoped<DatabaseSeeder>();
+
 // Server state
 builder.Services.AddSingleton<IServer>(sp => new ServerState(
     sp.GetRequiredService<ServerConfig>(),
@@ -135,7 +168,7 @@ var apiKeyEntries = config.AdminApi.ApiKeys.Select(k => new ApiKeyEntry
 }).ToList();
 builder.Services.AddSingleton(new ApiKeyAuthenticator(apiKeyEntries));
 
-// Admin API — method registrations
+// Admin API — method registrations (non-DB methods are plain singletons)
 builder.Services.AddSingleton<IAdminMethod, ServerStatsMethod>();
 builder.Services.AddSingleton<IAdminMethod, ServerRehashMethod>();
 builder.Services.AddSingleton<IAdminMethod, ServerMotdGetMethod>();
@@ -145,7 +178,8 @@ builder.Services.AddSingleton<IAdminMethod, ServerOperSetMethod>();
 builder.Services.AddSingleton<IAdminMethod, UserListMethod>();
 builder.Services.AddSingleton<IAdminMethod, UserInfoMethod>();
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new UserKickMethod(sp.GetRequiredService<IServer>(), sp.GetService<IAuditLogRepository>()));
+    new ScopedMethod("user.kick", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new UserKickMethod(sp.GetRequiredService<IServer>(), svc.GetRequiredService<IAuditLogRepository>())));
 builder.Services.AddSingleton<IAdminMethod, UserMessageMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelListMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelInfoMethod>();
@@ -154,85 +188,55 @@ builder.Services.AddSingleton<IAdminMethod, ChannelModeMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelCreateMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelDeleteMethod>();
 
-// Ban, Role, and Audit methods require database services — register only when available
+// DB-dependent methods use ScopedMethod to create a fresh DI scope per call
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var bans = sp.GetService<IBanRepository>();
-    if (bans == null) return new StubMethod("ban.list");
-    return new BanListMethod(bans);
-});
+    new ScopedMethod("ban.list", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new BanListMethod(svc.GetRequiredService<IBanRepository>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var bans = sp.GetService<IBanRepository>();
-    if (bans == null) return new StubMethod("ban.add");
-    return new BanAddMethod(bans, sp.GetService<IAuditLogRepository>());
-});
+    new ScopedMethod("ban.add", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new BanAddMethod(svc.GetRequiredService<IBanRepository>(), svc.GetRequiredService<IAuditLogRepository>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var bans = sp.GetService<IBanRepository>();
-    if (bans == null) return new StubMethod("ban.remove");
-    return new BanRemoveMethod(bans, sp.GetService<IAuditLogRepository>());
-});
+    new ScopedMethod("ban.remove", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new BanRemoveMethod(svc.GetRequiredService<IBanRepository>(), svc.GetRequiredService<IAuditLogRepository>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var bans = sp.GetService<IBanRepository>();
-    if (bans == null) return new StubMethod("ban.check");
-    return new BanCheckMethod(bans);
-});
+    new ScopedMethod("ban.check", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new BanCheckMethod(svc.GetRequiredService<IBanRepository>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.list");
-    return new RoleListMethod(perms);
-});
+    new ScopedMethod("role.list", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleListMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.get");
-    return new RoleGetMethod(perms);
-});
+    new ScopedMethod("role.get", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleGetMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.create");
-    return new RoleCreateMethod(perms);
-});
+    new ScopedMethod("role.create", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleCreateMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.update");
-    return new RoleUpdateMethod(perms);
-});
+    new ScopedMethod("role.update", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleUpdateMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.delete");
-    return new RoleDeleteMethod(perms);
-});
+    new ScopedMethod("role.delete", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleDeleteMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.assign");
-    return new RoleAssignMethod(perms);
-});
+    new ScopedMethod("role.assign", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleAssignMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var perms = sp.GetService<IPermissionService>();
-    if (perms == null) return new StubMethod("role.revoke");
-    return new RoleRevokeMethod(perms);
-});
+    new ScopedMethod("role.revoke", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleRevokeMethod(svc.GetRequiredService<IPermissionService>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var roles = sp.GetService<IRoleRepository>();
-    if (roles == null) return new StubMethod("role.members");
-    return new RoleMembersMethod(roles);
-});
+    new ScopedMethod("role.members", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new RoleMembersMethod(svc.GetRequiredService<IRoleRepository>())));
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-{
-    var audit = sp.GetService<IAuditLogRepository>();
-    if (audit == null) return new StubMethod("audit.query");
-    return new AuditQueryMethod(audit);
-});
+    new ScopedMethod("audit.query", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new AuditQueryMethod(svc.GetRequiredService<IAuditLogRepository>())));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("chatlog.query", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new ChatLogQueryMethod(svc.GetRequiredService<IChatLogRepository>())));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("userhistory.query", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new UserHistoryQueryMethod(svc.GetRequiredService<IUserHistoryRepository>())));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("topichistory.query", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new TopicHistoryQueryMethod(svc.GetRequiredService<ITopicHistoryRepository>())));
 
 // Admin API — JSON-RPC processor
 builder.Services.AddSingleton<JsonRpcProcessor>();
@@ -278,10 +282,41 @@ builder.Services.AddHostedService<ServerHost>();
 
 var app = builder.Build();
 
+// Seed the database (creates tables + built-in roles if needed)
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+    await seeder.SeedAsync();
+    app.Logger.LogInformation("Database initialized ({Provider})",
+        dbConfig.Provider.ToLowerInvariant() == "sqlite"
+            ? $"SQLite: {dbConnectionString ?? "meatspeak.db"}"
+            : dbConfig.Provider);
+}
+
 // Register command handlers after build
 var server = app.Services.GetRequiredService<IServer>();
+
+// Restore persisted channels from database
+using (var scope = app.Services.CreateScope())
+{
+    var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+    var persistedChannels = await channelRepo.GetAllAsync();
+    foreach (var ch in persistedChannels)
+    {
+        var channel = server.GetOrCreateChannel(ch.Name);
+        channel.Topic = ch.Topic;
+        channel.TopicSetBy = ch.TopicSetBy;
+        channel.TopicSetAt = ch.TopicSetAt;
+        channel.Key = ch.Key;
+        channel.UserLimit = ch.UserLimit;
+        foreach (var m in ch.Modes)
+            channel.Modes.Add(m);
+        app.Logger.LogInformation("Restored channel {Channel} from database", ch.Name);
+    }
+}
 var registration = app.Services.GetRequiredService<RegistrationPipeline>();
 var numerics = app.Services.GetRequiredService<NumericSender>();
+var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
 
 // Connection handlers
 server.Commands.Register(new PingHandler());
@@ -289,18 +324,18 @@ server.Commands.Register(new PongHandler());
 server.Commands.Register(new PassHandler(server));
 server.Commands.Register(new NickHandler(server, registration));
 server.Commands.Register(new UserHandler(server, registration));
-server.Commands.Register(new QuitHandler());
+server.Commands.Register(new QuitHandler(scopeFactory));
 server.Commands.Register(new CapHandler(server, registration));
 
 // Messaging handlers
-server.Commands.Register(new PrivmsgHandler(server));
-server.Commands.Register(new NoticeHandler(server));
+server.Commands.Register(new PrivmsgHandler(server, scopeFactory));
+server.Commands.Register(new NoticeHandler(server, scopeFactory));
 
 // Channel handlers
-server.Commands.Register(new JoinHandler(server));
-server.Commands.Register(new PartHandler(server));
+server.Commands.Register(new JoinHandler(server, scopeFactory));
+server.Commands.Register(new PartHandler(server, scopeFactory));
 server.Commands.Register(new ModeHandler(server));
-server.Commands.Register(new TopicHandler(server));
+server.Commands.Register(new TopicHandler(server, scopeFactory));
 server.Commands.Register(new KickHandler(server));
 server.Commands.Register(new NamesHandler(server));
 server.Commands.Register(new ListHandler(server));

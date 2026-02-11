@@ -6,14 +6,22 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data.Entities;
+using MeatSpeak.Server.Data.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 
 public sealed class JoinHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly IServiceScopeFactory? _scopeFactory;
     public string Command => IrcConstants.JOIN;
     public SessionState MinimumState => SessionState.Registered;
 
-    public JoinHandler(IServer server) => _server = server;
+    public JoinHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    {
+        _server = server;
+        _scopeFactory = scopeFactory;
+    }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -125,6 +133,33 @@ public sealed class JoinHandler : ICommandHandler
         await SendNamesReply(session, channel, _server.Config.ServerName);
 
         _server.Events.Publish(new ChannelJoinedEvent(session.Id, nick, name));
+
+        // Persist new channel creation to database
+        if (isNew)
+            await PersistChannelAsync(channel, ct: default);
+    }
+
+    private async ValueTask PersistChannelAsync(IChannel channel, CancellationToken ct)
+    {
+        if (_scopeFactory == null) return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var channels = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+            await channels.UpsertAsync(new ChannelEntity
+            {
+                Id = Guid.NewGuid(),
+                Name = channel.Name,
+                Topic = channel.Topic,
+                TopicSetBy = channel.TopicSetBy,
+                TopicSetAt = channel.TopicSetAt,
+                CreatedAt = channel.CreatedAt,
+                Key = channel.Key,
+                UserLimit = channel.UserLimit,
+                Modes = new string(channel.Modes.ToArray()),
+            }, ct);
+        }
+        catch { /* DB persistence failure should not break channel creation */ }
     }
 
     internal static async ValueTask SendNamesReply(ISession session, IChannel channel, string serverName)

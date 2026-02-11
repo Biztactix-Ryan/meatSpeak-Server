@@ -8,6 +8,7 @@ using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Registration;
 using MeatSpeak.Server.Handlers.Connection;
 using MeatSpeak.Server.Numerics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeatSpeak.Server.Tests.Handlers;
@@ -25,7 +26,8 @@ public class CapHandlerTests
         var capRegistry = new CapabilityRegistry();
         _server.Capabilities.Returns(capRegistry);
         var numerics = new NumericSender(_server);
-        var registration = new RegistrationPipeline(_server, numerics, NullLogger<RegistrationPipeline>.Instance);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var registration = new RegistrationPipeline(_server, numerics, scopeFactory, NullLogger<RegistrationPipeline>.Instance);
         _handler = new CapHandler(_server, registration);
     }
 

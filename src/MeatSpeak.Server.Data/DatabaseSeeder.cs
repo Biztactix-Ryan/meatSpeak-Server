@@ -48,5 +48,21 @@ public sealed class DatabaseSeeder
             });
 
         await _db.SaveChangesAsync(ct);
+
+        // Seed default #lobby channel
+        if (!await _db.Channels.AnyAsync(ct))
+        {
+            _db.Channels.Add(new ChannelEntity
+            {
+                Id = Guid.NewGuid(),
+                Name = "#lobby",
+                Topic = "Welcome to MeatSpeak!",
+                TopicSetBy = "server",
+                TopicSetAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow,
+                Modes = "nt",
+            });
+            await _db.SaveChangesAsync(ct);
+        }
     }
 }

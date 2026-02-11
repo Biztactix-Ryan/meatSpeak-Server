@@ -10,6 +10,7 @@ using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Registration;
 using MeatSpeak.Server.Handlers.Connection;
 using MeatSpeak.Server.Numerics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeatSpeak.Server.Tests.Handlers;
@@ -26,7 +27,8 @@ public class NickHandlerTests
         _server.Config.Returns(new ServerConfig { ServerName = "test.server" });
         _server.Events.Returns(Substitute.For<IEventBus>());
         var numerics = new NumericSender(_server);
-        _registration = new RegistrationPipeline(_server, numerics, NullLogger<RegistrationPipeline>.Instance);
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        _registration = new RegistrationPipeline(_server, numerics, scopeFactory, NullLogger<RegistrationPipeline>.Instance);
         _handler = new NickHandler(_server, _registration);
     }
 
