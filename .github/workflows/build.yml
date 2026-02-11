@@ -44,7 +44,7 @@ jobs:
           dotnet run --project tools/MeatSpeak.Benchmark --configuration Release --
           --users 100 --concurrency 50 --actions 20 --channels 10
           --delay 10 --quiet --seed 1 --max-errors 0
-          --output benchmark-results.json
+          --output "$PWD/benchmark-results.json"
 
       - name: Wait for server auto-shutdown
         run: |
