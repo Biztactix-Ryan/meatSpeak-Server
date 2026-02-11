@@ -35,6 +35,7 @@ public sealed class ServerMetrics
     // Public read-only access for polling (e.g. BenchmarkService)
     public long ConnectionsAccepted => Interlocked.Read(ref _connectionsAcceptedValue);
     public long ConnectionsActive => Interlocked.Read(ref _connectionsActiveValue);
+    public long RegistrationsCompleted => Interlocked.Read(ref _registrationsCompletedValue);
 
     // Counter snapshot values
     private long _connectionsAcceptedValue;

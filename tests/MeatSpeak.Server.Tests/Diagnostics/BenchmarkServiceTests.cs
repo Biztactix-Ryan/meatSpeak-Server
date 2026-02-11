@@ -38,13 +38,24 @@ public class BenchmarkServiceTests
     }
 
     [Fact]
+    public void ServerMetrics_RegistrationsCompleted_ReflectsCount()
+    {
+        Assert.Equal(0, _metrics.RegistrationsCompleted);
+        _metrics.RegistrationCompleted();
+        Assert.Equal(1, _metrics.RegistrationsCompleted);
+        _metrics.RegistrationCompleted();
+        Assert.Equal(2, _metrics.RegistrationsCompleted);
+    }
+
+    [Fact]
     public async Task CallsStopApplication_WhenAllClientsDisconnect()
     {
         var svc = new BenchmarkService(_metrics, _lifetime, _logger, outputPath: null);
 
-        // Simulate a client already connected before start
+        // Simulate a registered client
         _metrics.ConnectionAccepted();
         _metrics.ConnectionActive();
+        _metrics.RegistrationCompleted();
 
         await svc.StartAsync(CancellationToken.None);
 
@@ -70,6 +81,7 @@ public class BenchmarkServiceTests
             // Simulate some activity
             _metrics.ConnectionAccepted();
             _metrics.ConnectionActive();
+            _metrics.RegistrationCompleted();
             _metrics.CommandDispatched();
             _metrics.MessageBroadcast();
 
@@ -109,6 +121,7 @@ public class BenchmarkServiceTests
 
         _metrics.ConnectionAccepted();
         _metrics.ConnectionActive();
+        _metrics.RegistrationCompleted();
 
         await svc.StartAsync(CancellationToken.None);
         _metrics.ConnectionClosed();
@@ -116,22 +129,42 @@ public class BenchmarkServiceTests
         await Task.Delay(4000);
 
         _lifetime.Received().StopApplication();
-        // No exception, no file — just verifying clean execution with null path
 
         await svc.StopAsync(CancellationToken.None);
     }
 
     [Fact]
-    public async Task StopAsync_CancelsPollBeforeAnyConnection()
+    public async Task StopAsync_CancelsPollBeforeAnyRegistration()
     {
         var svc = new BenchmarkService(_metrics, _lifetime, _logger, outputPath: null);
 
         await svc.StartAsync(CancellationToken.None);
 
-        // No connections ever — stop immediately
+        // No registrations ever — stop immediately
         await svc.StopAsync(CancellationToken.None);
 
-        // StopApplication should NOT have been called since no clients ever connected
         _lifetime.DidNotReceive().StopApplication();
+    }
+
+    [Fact]
+    public async Task DoesNotTrigger_WhenConnectionWithoutRegistration()
+    {
+        // Simulates a health-check probe (nc -z) that connects and disconnects
+        // without completing registration
+        var svc = new BenchmarkService(_metrics, _lifetime, _logger, outputPath: null);
+
+        _metrics.ConnectionAccepted();
+        _metrics.ConnectionActive();
+        _metrics.ConnectionClosed();
+        // No RegistrationCompleted() call
+
+        await svc.StartAsync(CancellationToken.None);
+
+        // Wait long enough that it would have triggered if using ConnectionsAccepted
+        await Task.Delay(4000);
+
+        _lifetime.DidNotReceive().StopApplication();
+
+        await svc.StopAsync(CancellationToken.None);
     }
 }

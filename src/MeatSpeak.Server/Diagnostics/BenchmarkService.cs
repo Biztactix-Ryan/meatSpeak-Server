@@ -47,12 +47,13 @@ public sealed class BenchmarkService : IHostedService
 
     private async Task PollAsync(CancellationToken ct)
     {
-        // Wait until at least one connection has been accepted
-        while (!ct.IsCancellationRequested && _metrics.ConnectionsAccepted == 0)
+        // Wait until at least one client completes registration (NICK/USER).
+        // This avoids false triggers from health-check probes like `nc -z`.
+        while (!ct.IsCancellationRequested && _metrics.RegistrationsCompleted == 0)
             await Task.Delay(500, ct);
 
-        _logger.LogInformation("Benchmark: first client connected (accepted={Accepted}, active={Active})",
-            _metrics.ConnectionsAccepted, _metrics.ConnectionsActive);
+        _logger.LogInformation("Benchmark: first client registered (registrations={Registrations}, active={Active})",
+            _metrics.RegistrationsCompleted, _metrics.ConnectionsActive);
 
         // Wait until all clients have disconnected
         while (!ct.IsCancellationRequested && _metrics.ConnectionsActive > 0)
