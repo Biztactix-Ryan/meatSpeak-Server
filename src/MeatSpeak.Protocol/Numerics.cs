@@ -16,8 +16,12 @@ public static class Numerics
     public const int RPL_LUSERCHANNELS = 254;
     public const int RPL_LUSERME = 255;
 
-    // Whois / Who
+    // Away
     public const int RPL_AWAY = 301;
+    public const int RPL_UNAWAY = 305;
+    public const int RPL_NOWAWAY = 306;
+
+    // Whois / Who
     public const int RPL_WHOISUSER = 311;
     public const int RPL_WHOISSERVER = 312;
     public const int RPL_WHOISOPERATOR = 313;
