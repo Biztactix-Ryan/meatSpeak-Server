@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace MeatSpeak.Benchmark;
 
@@ -118,5 +119,29 @@ public sealed class AggregateMetrics
         Console.WriteLine($"  Bytes sent:     {FormatBytes(BytesSent)}");
         Console.WriteLine($"  Bytes received: {FormatBytes(BytesReceived)}");
         Console.WriteLine("──────────────────────────────────────────────────────────");
+    }
+
+    public void WriteJson(string path)
+    {
+        var data = new
+        {
+            seed = Seed,
+            transport = Transport,
+            totalUsers = TotalUsers,
+            concurrency = Concurrency,
+            actionsPerUser = ActionsPerUser,
+            totalActions = TotalActions,
+            totalErrors = TotalErrors,
+            durationSeconds = Math.Round(DurationSeconds, 2),
+            throughput = Math.Round(Throughput, 2),
+            errorRate = Math.Round(ErrorRate, 2),
+            bytesSent = BytesSent,
+            bytesReceived = BytesReceived,
+            connectTimeMs = new { p50 = ConnectP50, p95 = ConnectP95, p99 = ConnectP99 },
+            actionTimeMs = new { p50 = ActionP50, p95 = ActionP95, p99 = ActionP99 },
+        };
+
+        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(path, json);
     }
 }

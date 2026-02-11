@@ -13,6 +13,8 @@ public sealed record BenchmarkOptions
     public int Actions { get; init; } = 20;
     public int Delay { get; init; } = 50;
     public bool Quiet { get; init; } = false;
+    public int MaxErrors { get; init; } = -1;
+    public string? OutputPath { get; init; }
 
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -54,6 +56,12 @@ public sealed record BenchmarkOptions
                 case "--quiet":
                     opts = opts with { Quiet = true };
                     break;
+                case "--max-errors" when i + 1 < args.Length:
+                    opts = opts with { MaxErrors = int.Parse(args[++i]) };
+                    break;
+                case "--output" when i + 1 < args.Length:
+                    opts = opts with { OutputPath = args[++i] };
+                    break;
                 case "--help" or "-h":
                     PrintUsage();
                     Environment.Exit(0);
@@ -85,6 +93,8 @@ public sealed record BenchmarkOptions
               --actions <n>          Actions per user (default: 20)
               --delay <ms>           Delay between actions (default: 50)
               --quiet                Suppress per-user logging
+              --max-errors <n>       Exit with code 1 if errors exceed n (default: -1 = disabled)
+              --output <path>        Write JSON results to file
               --help, -h             Show this help
             """);
     }

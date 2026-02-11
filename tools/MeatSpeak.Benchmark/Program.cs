@@ -17,3 +17,14 @@ Console.CancelKeyPress += (_, e) =>
 var runner = new BenchmarkRunner(opts);
 var metrics = await runner.RunAsync(cts.Token);
 metrics.Print();
+
+if (opts.OutputPath is not null)
+    metrics.WriteJson(opts.OutputPath);
+
+if (opts.MaxErrors >= 0 && metrics.TotalErrors > opts.MaxErrors)
+{
+    Console.Error.WriteLine($"Benchmark failed: {metrics.TotalErrors} errors exceeded max-errors threshold of {opts.MaxErrors}");
+    return 1;
+}
+
+return 0;

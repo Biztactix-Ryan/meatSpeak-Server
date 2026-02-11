@@ -31,6 +31,29 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release
 
+      - name: Start server
+        run: |
+          dotnet run --project src/MeatSpeak.Server --configuration Release &
+          timeout 30 bash -c 'until nc -z localhost 6667; do sleep 0.5; done'
+
+      - name: Run smoke benchmark
+        run: >
+          dotnet run --project tools/MeatSpeak.Benchmark --configuration Release --
+          --users 100 --concurrency 50 --actions 20 --channels 10
+          --delay 10 --quiet --seed 1 --max-errors 0
+          --output benchmark-results.json
+
+      - name: Stop server
+        if: always()
+        run: pkill -f 'MeatSpeak.Server' || true
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.json
+
       - name: Publish linux-x64
         run: dotnet publish src/MeatSpeak.Server/MeatSpeak.Server.csproj --configuration Release --runtime linux-x64 --self-contained -o publish/linux-x64
 

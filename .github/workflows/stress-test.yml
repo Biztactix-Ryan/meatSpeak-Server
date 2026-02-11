@@ -1,0 +1,51 @@
+name: Daily Stress Test
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  stress-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout meatSpeak-Server
+        uses: actions/checkout@v4
+
+      - name: Checkout meatSpeak-Auth (MeatSpeak.Identity)
+        run: git clone --depth 1 https://github.com/Biztactix-Ryan/meatSpeak-Auth.git "$GITHUB_WORKSPACE/../meatSpeak"
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Start server
+        run: |
+          dotnet run --project src/MeatSpeak.Server --configuration Release &
+          timeout 30 bash -c 'until nc -z localhost 6667; do sleep 0.5; done'
+
+      - name: Run stress test
+        run: >
+          dotnet run --project tools/MeatSpeak.Benchmark --configuration Release --
+          --users 10000 --concurrency 1000 --actions 20 --channels 50
+          --delay 10 --quiet --seed 42 --max-errors 0
+          --output stress-test-results.json
+
+      - name: Stop server
+        if: always()
+        run: pkill -f 'MeatSpeak.Server' || true
+
+      - name: Upload stress test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-test-results
+          path: stress-test-results.json
