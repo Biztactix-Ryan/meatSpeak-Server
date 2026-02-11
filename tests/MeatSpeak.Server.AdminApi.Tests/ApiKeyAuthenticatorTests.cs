@@ -1,0 +1,69 @@
+using Xunit;
+using MeatSpeak.Server.AdminApi.Auth;
+
+namespace MeatSpeak.Server.AdminApi.Tests;
+
+public class ApiKeyAuthenticatorTests
+{
+    [Fact]
+    public void Authenticate_ValidKey_ReturnsTrue()
+    {
+        var hash = ApiKeyAuthenticator.HashKey("my-secret-key");
+        var keys = new[] { new ApiKeyEntry { Name = "test", KeyHash = hash } };
+        var auth = new ApiKeyAuthenticator(keys);
+        Assert.True(auth.Authenticate("my-secret-key"));
+    }
+
+    [Fact]
+    public void Authenticate_InvalidKey_ReturnsFalse()
+    {
+        var hash = ApiKeyAuthenticator.HashKey("my-secret-key");
+        var keys = new[] { new ApiKeyEntry { Name = "test", KeyHash = hash } };
+        var auth = new ApiKeyAuthenticator(keys);
+        Assert.False(auth.Authenticate("wrong-key"));
+    }
+
+    [Fact]
+    public void Authenticate_MethodRestriction_Allowed()
+    {
+        var hash = ApiKeyAuthenticator.HashKey("restricted-key");
+        var keys = new[] { new ApiKeyEntry
+        {
+            Name = "restricted",
+            KeyHash = hash,
+            AllowedMethods = new List<string> { "server.stats", "user.list" }
+        }};
+        var auth = new ApiKeyAuthenticator(keys);
+        Assert.True(auth.Authenticate("restricted-key", "server.stats"));
+    }
+
+    [Fact]
+    public void Authenticate_MethodRestriction_Denied()
+    {
+        var hash = ApiKeyAuthenticator.HashKey("restricted-key");
+        var keys = new[] { new ApiKeyEntry
+        {
+            Name = "restricted",
+            KeyHash = hash,
+            AllowedMethods = new List<string> { "server.stats" }
+        }};
+        var auth = new ApiKeyAuthenticator(keys);
+        Assert.False(auth.Authenticate("restricted-key", "server.shutdown"));
+    }
+
+    [Fact]
+    public void HashKey_ProducesDeterministicHash()
+    {
+        var hash1 = ApiKeyAuthenticator.HashKey("test");
+        var hash2 = ApiKeyAuthenticator.HashKey("test");
+        Assert.Equal(hash1, hash2);
+        Assert.Equal(64, hash1.Length); // SHA-256 hex = 64 chars
+    }
+
+    [Fact]
+    public void Authenticate_EmptyKeys_ReturnsFalse()
+    {
+        var auth = new ApiKeyAuthenticator(Array.Empty<ApiKeyEntry>());
+        Assert.False(auth.Authenticate("any-key"));
+    }
+}

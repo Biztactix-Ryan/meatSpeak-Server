@@ -1,0 +1,33 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+
+## Visual Studio
+.vs/
+launchSettings.json
+
+## Rider
+*.sln.iml
+.idea/
+
+## Test results
+TestResults/
+coverage/
+*.trx
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Secrets
+*.pfx
+*.key
+appsettings.*.json
+!appsettings.json
+server-config.local.json

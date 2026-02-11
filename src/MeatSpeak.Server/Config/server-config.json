@@ -1,0 +1,20 @@
+{
+  "ServerName": "meatspeak.local",
+  "NetworkName": "MeatSpeak",
+  "Description": "MeatSpeak IRC Server",
+  "OwnerAccount": "admin",
+  "Motd": [
+    "Welcome to MeatSpeak!",
+    "A modern IRC server with voice support.",
+    "https://github.com/meatspeak"
+  ],
+  "TcpBindAddress": "0.0.0.0",
+  "TcpPort": 6667,
+  "UdpBindAddress": "0.0.0.0",
+  "UdpPort": 6668,
+  "AdminPort": 6670,
+  "MaxConnections": 1024,
+  "PingInterval": 60,
+  "PingTimeout": 180,
+  "Version": "meatspeak-0.1.0"
+}
