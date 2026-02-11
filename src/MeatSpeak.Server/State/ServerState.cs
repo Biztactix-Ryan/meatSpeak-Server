@@ -8,11 +8,14 @@ using MeatSpeak.Server.Core.Modes;
 using MeatSpeak.Server.Core.Capabilities;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Diagnostics;
 
 public sealed class ServerState : IServer
 {
     private readonly ConcurrentDictionary<string, ISession> _sessions = new();
+    private readonly ConcurrentDictionary<string, ISession> _nickIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ServerMetrics? _metrics;
 
     public ServerConfig Config { get; }
     public CommandRegistry Commands { get; }
@@ -26,13 +29,15 @@ public sealed class ServerState : IServer
         CommandRegistry commands,
         ModeRegistry modes,
         CapabilityRegistry capabilities,
-        IEventBus events)
+        IEventBus events,
+        ServerMetrics? metrics = null)
     {
         Config = config;
         Commands = commands;
         Modes = modes;
         Capabilities = capabilities;
         Events = events;
+        _metrics = metrics;
     }
 
     public IReadOnlyDictionary<string, ISession> Sessions => _sessions;
@@ -41,14 +46,36 @@ public sealed class ServerState : IServer
 
     public void AddSession(ISession session) => _sessions[session.Id] = session;
 
-    public void RemoveSession(string sessionId) => _sessions.TryRemove(sessionId, out _);
+    public void RemoveSession(string sessionId)
+    {
+        if (_sessions.TryRemove(sessionId, out var session))
+        {
+            var nick = session.Info.Nickname;
+            if (nick != null)
+                _nickIndex.TryRemove(nick, out _);
+        }
+    }
 
     public ISession? FindSessionByNick(string nickname)
     {
-        foreach (var session in _sessions.Values)
-            if (string.Equals(session.Info.Nickname, nickname, StringComparison.OrdinalIgnoreCase))
-                return session;
-        return null;
+        var start = ServerMetrics.GetTimestamp();
+        try
+        {
+            _nickIndex.TryGetValue(nickname, out var session);
+            return session;
+        }
+        finally
+        {
+            _metrics?.RecordNickLookupDuration(ServerMetrics.GetElapsedMs(start));
+        }
+    }
+
+    public void UpdateNickIndex(string? oldNick, string? newNick, ISession session)
+    {
+        if (oldNick != null)
+            _nickIndex.TryRemove(oldNick, out _);
+        if (newNick != null)
+            _nickIndex[newNick] = session;
     }
 
     public IReadOnlyDictionary<string, IChannel> Channels => _channels;

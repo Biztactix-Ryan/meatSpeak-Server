@@ -2,6 +2,7 @@ using System.Net;
 using Xunit;
 using NSubstitute;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -13,7 +14,7 @@ public class WebSocketMiddlewarePassthroughTests
         RequestDelegate next, string path = "/irc")
     {
         var server = Substitute.For<IServer>();
-        var handler = new IrcConnectionHandler(server, NullLogger<IrcConnectionHandler>.Instance);
+        var handler = new IrcConnectionHandler(server, NullLogger<IrcConnectionHandler>.Instance, new ServerMetrics());
         var logger = NullLogger<WebSocketMiddleware>.Instance;
         return new WebSocketMiddleware(next, handler, logger, path);
     }

@@ -5,6 +5,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Diagnostics;
 using MeatSpeak.Server.State;
 using MeatSpeak.Server.Transport;
 using Microsoft.Extensions.Logging;
@@ -14,13 +15,15 @@ public sealed class IrcConnectionHandler : IConnectionHandler
 {
     private readonly IServer _server;
     private readonly ILogger<IrcConnectionHandler> _logger;
+    private readonly ServerMetrics _metrics;
     private readonly Dictionary<string, SessionImpl> _connectionSessions = new();
     private readonly object _sessionsLock = new();
 
-    public IrcConnectionHandler(IServer server, ILogger<IrcConnectionHandler> logger)
+    public IrcConnectionHandler(IServer server, ILogger<IrcConnectionHandler> logger, ServerMetrics metrics)
     {
         _server = server;
         _logger = logger;
+        _metrics = metrics;
     }
 
     public void OnConnected(IConnection connection)
@@ -29,6 +32,8 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         lock (_sessionsLock)
             _connectionSessions[connection.Id] = session;
         _server.AddSession(session);
+        _metrics.ConnectionAccepted();
+        _metrics.ConnectionActive();
         _server.Events.Publish(new SessionConnectedEvent(session.Id));
         _logger.LogInformation("Client connected: {Id} from {Remote}", session.Id, connection.RemoteEndPoint);
     }
@@ -83,17 +88,24 @@ public sealed class IrcConnectionHandler : IConnectionHandler
 
         var message = parts.ToMessage();
         session.Info.LastActivity = DateTimeOffset.UtcNow;
+        _metrics.CommandDispatched();
 
         // Fire and forget the handler (we're on the transport callback thread)
         _ = Task.Run(async () =>
         {
+            var start = ServerMetrics.GetTimestamp();
             try
             {
                 await handler.HandleAsync(session, message);
             }
             catch (Exception ex)
             {
+                _metrics.Error();
                 _logger.LogError(ex, "Error handling {Command} from {Id}", commandStr, session.Id);
+            }
+            finally
+            {
+                _metrics.RecordCommandDuration(commandStr, ServerMetrics.GetElapsedMs(start));
             }
         });
     }
@@ -107,38 +119,51 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 return;
         }
 
+        var nick = session.Info.Nickname;
+        if (nick != null)
+            _server.UpdateNickIndex(nick, null, session);
         _server.RemoveSession(session.Id);
 
-        // Broadcast QUIT to all users sharing channels (deduplicated)
-        var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var quitReason = "Connection closed";
-        foreach (var channelName in session.Info.Channels.ToList())
+        // Move broadcast off the transport thread to avoid blocking accept/receive
+        _ = Task.Run(async () =>
         {
-            if (_server.Channels.TryGetValue(channelName, out var channel))
+            try
             {
-                foreach (var (memberNick, _) in channel.Members)
+                // Broadcast QUIT to all users sharing channels (deduplicated)
+                var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var quitReason = "Connection closed";
+                foreach (var channelName in session.Info.Channels.ToList())
                 {
-                    if (session.Info.Nickname != null &&
-                        string.Equals(memberNick, session.Info.Nickname, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (notified.Add(memberNick))
+                    if (_server.Channels.TryGetValue(channelName, out var channel))
                     {
-                        var memberSession = _server.FindSessionByNick(memberNick);
-                        if (memberSession != null)
+                        foreach (var (memberNick, _) in channel.Members)
                         {
-                            memberSession.SendMessageAsync(
-                                session.Info.Prefix, IrcConstants.QUIT, quitReason).AsTask().Wait();
+                            if (nick != null &&
+                                string.Equals(memberNick, nick, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            if (notified.Add(memberNick))
+                            {
+                                var memberSession = _server.FindSessionByNick(memberNick);
+                                if (memberSession != null)
+                                    await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.QUIT, quitReason);
+                            }
                         }
+
+                        channel.RemoveMember(nick!);
+                        if (channel.Members.Count == 0)
+                            _server.RemoveChannel(channelName);
                     }
                 }
 
-                channel.RemoveMember(session.Info.Nickname!);
-                if (channel.Members.Count == 0)
-                    _server.RemoveChannel(channelName);
+                _server.Events.Publish(new SessionDisconnectedEvent(session.Id, quitReason));
             }
-        }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error broadcasting QUIT for {Id}", session.Id);
+            }
+        });
 
-        _server.Events.Publish(new SessionDisconnectedEvent(session.Id, quitReason));
+        _metrics.ConnectionClosed();
         _logger.LogInformation("Client disconnected: {Id}", session.Id);
     }
 }

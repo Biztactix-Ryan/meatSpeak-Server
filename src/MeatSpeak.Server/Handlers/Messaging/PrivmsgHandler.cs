@@ -5,21 +5,23 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
-using MeatSpeak.Server.Data.Repositories;
-using Microsoft.Extensions.DependencyInjection;
+using MeatSpeak.Server.Diagnostics;
 
 public sealed class PrivmsgHandler : ICommandHandler
 {
     private readonly IServer _server;
-    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly DbWriteQueue? _writeQueue;
+    private readonly ServerMetrics? _metrics;
     public string Command => IrcConstants.PRIVMSG;
     public SessionState MinimumState => SessionState.Registered;
 
-    public PrivmsgHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    public PrivmsgHandler(IServer server, DbWriteQueue? writeQueue = null, ServerMetrics? metrics = null)
     {
         _server = server;
-        _scopeFactory = scopeFactory;
+        _writeQueue = writeQueue;
+        _metrics = metrics;
     }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
@@ -51,6 +53,7 @@ public sealed class PrivmsgHandler : ICommandHandler
             }
 
             // Send to all channel members except sender
+            var broadcastStart = ServerMetrics.GetTimestamp();
             foreach (var (nick, _) in channel.Members)
             {
                 if (string.Equals(nick, session.Info.Nickname, StringComparison.OrdinalIgnoreCase))
@@ -59,9 +62,11 @@ public sealed class PrivmsgHandler : ICommandHandler
                 if (targetSession != null)
                     await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
             }
+            _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
+            _metrics?.MessageBroadcast();
             _server.Events.Publish(new ChannelMessageEvent(session.Id, session.Info.Nickname!, target, text));
 
-            await LogMessageAsync(session.Info.Nickname!, target, null, text, "PRIVMSG", ct);
+            LogMessage(session.Info.Nickname!, target, null, text, "PRIVMSG");
         }
         else
         {
@@ -74,29 +79,23 @@ public sealed class PrivmsgHandler : ICommandHandler
                 return;
             }
             await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            _metrics?.MessagePrivate();
             _server.Events.Publish(new PrivateMessageEvent(session.Id, session.Info.Nickname!, target, text));
 
-            await LogMessageAsync(session.Info.Nickname!, null, target, text, "PRIVMSG", ct);
+            LogMessage(session.Info.Nickname!, null, target, text, "PRIVMSG");
         }
     }
 
-    private async ValueTask LogMessageAsync(string sender, string? channel, string? target, string text, string type, CancellationToken ct)
+    private void LogMessage(string sender, string? channel, string? target, string text, string type)
     {
-        if (_scopeFactory == null) return;
-        try
+        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
         {
-            using var scope = _scopeFactory.CreateScope();
-            var chatLogs = scope.ServiceProvider.GetRequiredService<IChatLogRepository>();
-            await chatLogs.AddAsync(new ChatLogEntity
-            {
-                ChannelName = channel,
-                Target = target,
-                Sender = sender,
-                Message = text,
-                MessageType = type,
-                SentAt = DateTimeOffset.UtcNow,
-            }, ct);
-        }
-        catch { /* DB logging failure should not break messaging */ }
+            ChannelName = channel,
+            Target = target,
+            Sender = sender,
+            Message = text,
+            MessageType = type,
+            SentAt = DateTimeOffset.UtcNow,
+        }));
     }
 }

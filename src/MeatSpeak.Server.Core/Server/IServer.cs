@@ -20,6 +20,7 @@ public interface IServer
     void AddSession(ISession session);
     void RemoveSession(string sessionId);
     ISession? FindSessionByNick(string nickname);
+    void UpdateNickIndex(string? oldNick, string? newNick, ISession session);
 
     // Channel management
     IReadOnlyDictionary<string, IChannel> Channels { get; }

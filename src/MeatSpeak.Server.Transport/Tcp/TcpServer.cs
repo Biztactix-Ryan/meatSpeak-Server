@@ -22,7 +22,7 @@ public sealed class TcpServer : IDisposable
         _sendPool = sendPool ?? new SocketEventArgsPool(4096, preAllocate: 16);
     }
 
-    public void Start(IPEndPoint endPoint, int backlog = 128)
+    public void Start(IPEndPoint endPoint, int backlog = 2048)
     {
         _listenSocket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
         _listenSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);

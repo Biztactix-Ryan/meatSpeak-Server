@@ -3,16 +3,15 @@ namespace MeatSpeak.Server.Handlers.Connection;
 using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
-using MeatSpeak.Server.Data.Repositories;
-using Microsoft.Extensions.DependencyInjection;
+using MeatSpeak.Server.Data;
 
 public sealed class QuitHandler : ICommandHandler
 {
-    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly DbWriteQueue? _writeQueue;
     public string Command => IrcConstants.QUIT;
     public SessionState MinimumState => SessionState.Connecting;
 
-    public QuitHandler(IServiceScopeFactory? scopeFactory = null) => _scopeFactory = scopeFactory;
+    public QuitHandler(DbWriteQueue? writeQueue = null) => _writeQueue = writeQueue;
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -20,17 +19,9 @@ public sealed class QuitHandler : ICommandHandler
         var nickname = session.Info.Nickname;
 
         // Update user history before disconnecting
-        if (_scopeFactory != null && nickname != null && session.State >= SessionState.Registered)
+        if (_writeQueue != null && nickname != null && session.State >= SessionState.Registered)
         {
-            try
-            {
-                using var scope = _scopeFactory.CreateScope();
-                var userHistory = scope.ServiceProvider.GetRequiredService<IUserHistoryRepository>();
-                var entries = await userHistory.GetByNicknameAsync(nickname, 1, ct);
-                if (entries.Count > 0 && entries[0].DisconnectedAt == null)
-                    await userHistory.UpdateDisconnectAsync(entries[0].Id, DateTimeOffset.UtcNow, reason, ct);
-            }
-            catch { /* DB failure should not prevent disconnect */ }
+            _writeQueue.TryWrite(new UpdateUserDisconnect(nickname, DateTimeOffset.UtcNow, reason));
         }
 
         await session.DisconnectAsync(reason);

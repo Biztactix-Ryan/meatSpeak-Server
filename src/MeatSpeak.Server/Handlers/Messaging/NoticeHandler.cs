@@ -4,21 +4,23 @@ using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
-using MeatSpeak.Server.Data.Repositories;
-using Microsoft.Extensions.DependencyInjection;
+using MeatSpeak.Server.Diagnostics;
 
 public sealed class NoticeHandler : ICommandHandler
 {
     private readonly IServer _server;
-    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly DbWriteQueue? _writeQueue;
+    private readonly ServerMetrics? _metrics;
     public string Command => IrcConstants.NOTICE;
     public SessionState MinimumState => SessionState.Registered;
 
-    public NoticeHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    public NoticeHandler(IServer server, DbWriteQueue? writeQueue = null, ServerMetrics? metrics = null)
     {
         _server = server;
-        _scopeFactory = scopeFactory;
+        _writeQueue = writeQueue;
+        _metrics = metrics;
     }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
@@ -33,6 +35,7 @@ public sealed class NoticeHandler : ICommandHandler
             if (!_server.Channels.TryGetValue(target, out var channel)) return;
             if (!channel.IsMember(session.Info.Nickname!)) return;
 
+            var broadcastStart = ServerMetrics.GetTimestamp();
             foreach (var (nick, _) in channel.Members)
             {
                 if (string.Equals(nick, session.Info.Nickname, StringComparison.OrdinalIgnoreCase))
@@ -41,36 +44,32 @@ public sealed class NoticeHandler : ICommandHandler
                 if (targetSession != null)
                     await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.NOTICE, target, text);
             }
+            _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
+            _metrics?.MessageBroadcast();
 
-            await LogMessageAsync(session.Info.Nickname!, target, null, text, ct);
+            LogMessage(session.Info.Nickname!, target, null, text);
         }
         else
         {
             var targetSession = _server.FindSessionByNick(target);
             if (targetSession != null)
                 await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            _metrics?.MessagePrivate();
 
-            await LogMessageAsync(session.Info.Nickname!, null, target, text, ct);
+            LogMessage(session.Info.Nickname!, null, target, text);
         }
     }
 
-    private async ValueTask LogMessageAsync(string sender, string? channel, string? target, string text, CancellationToken ct)
+    private void LogMessage(string sender, string? channel, string? target, string text)
     {
-        if (_scopeFactory == null) return;
-        try
+        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
         {
-            using var scope = _scopeFactory.CreateScope();
-            var chatLogs = scope.ServiceProvider.GetRequiredService<IChatLogRepository>();
-            await chatLogs.AddAsync(new ChatLogEntity
-            {
-                ChannelName = channel,
-                Target = target,
-                Sender = sender,
-                Message = text,
-                MessageType = "NOTICE",
-                SentAt = DateTimeOffset.UtcNow,
-            }, ct);
-        }
-        catch { /* DB logging failure should not break messaging */ }
+            ChannelName = channel,
+            Target = target,
+            Sender = sender,
+            Message = text,
+            MessageType = "NOTICE",
+            SentAt = DateTimeOffset.UtcNow,
+        }));
     }
 }

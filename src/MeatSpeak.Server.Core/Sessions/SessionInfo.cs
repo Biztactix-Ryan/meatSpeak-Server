@@ -1,9 +1,11 @@
 namespace MeatSpeak.Server.Core.Sessions;
 
+using System.Diagnostics;
 using MeatSpeak.Server.Core.Capabilities;
 
 public sealed class SessionInfo
 {
+    public long ConnectTimestamp { get; set; } = Stopwatch.GetTimestamp();
     public string? Nickname { get; set; }
     public string? Username { get; set; }
     public string? Realname { get; set; }

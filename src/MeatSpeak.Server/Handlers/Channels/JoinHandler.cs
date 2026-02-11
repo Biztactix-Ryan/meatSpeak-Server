@@ -6,21 +6,23 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
-using MeatSpeak.Server.Data.Repositories;
-using Microsoft.Extensions.DependencyInjection;
+using MeatSpeak.Server.Diagnostics;
 
 public sealed class JoinHandler : ICommandHandler
 {
     private readonly IServer _server;
-    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly DbWriteQueue? _writeQueue;
+    private readonly ServerMetrics? _metrics;
     public string Command => IrcConstants.JOIN;
     public SessionState MinimumState => SessionState.Registered;
 
-    public JoinHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    public JoinHandler(IServer server, DbWriteQueue? writeQueue = null, ServerMetrics? metrics = null)
     {
         _server = server;
-        _scopeFactory = scopeFactory;
+        _writeQueue = writeQueue;
+        _metrics = metrics;
     }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
@@ -105,12 +107,14 @@ public sealed class JoinHandler : ICommandHandler
         session.Info.Channels.Add(name);
 
         // Broadcast JOIN to all channel members (including sender)
+        var broadcastStart = ServerMetrics.GetTimestamp();
         foreach (var (memberNick, _) in channel.Members)
         {
             var memberSession = _server.FindSessionByNick(memberNick);
             if (memberSession != null)
                 await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.JOIN, name);
         }
+        _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
 
         // Send topic
         if (!string.IsNullOrEmpty(channel.Topic))
@@ -136,17 +140,8 @@ public sealed class JoinHandler : ICommandHandler
 
         // Persist new channel creation to database
         if (isNew)
-            await PersistChannelAsync(channel, ct: default);
-    }
-
-    private async ValueTask PersistChannelAsync(IChannel channel, CancellationToken ct)
-    {
-        if (_scopeFactory == null) return;
-        try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var channels = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-            await channels.UpsertAsync(new ChannelEntity
+            _writeQueue?.TryWrite(new UpsertChannel(new ChannelEntity
             {
                 Id = Guid.NewGuid(),
                 Name = channel.Name,
@@ -157,9 +152,8 @@ public sealed class JoinHandler : ICommandHandler
                 Key = channel.Key,
                 UserLimit = channel.UserLimit,
                 Modes = new string(channel.Modes.ToArray()),
-            }, ct);
+            }));
         }
-        catch { /* DB persistence failure should not break channel creation */ }
     }
 
     internal static async ValueTask SendNamesReply(ISession session, IChannel channel, string serverName)

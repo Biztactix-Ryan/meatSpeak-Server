@@ -5,20 +5,19 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
-using MeatSpeak.Server.Data.Repositories;
-using Microsoft.Extensions.DependencyInjection;
+using MeatSpeak.Server.Data;
 
 public sealed class PartHandler : ICommandHandler
 {
     private readonly IServer _server;
-    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly DbWriteQueue? _writeQueue;
     public string Command => IrcConstants.PART;
     public SessionState MinimumState => SessionState.Registered;
 
-    public PartHandler(IServer server, IServiceScopeFactory? scopeFactory = null)
+    public PartHandler(IServer server, DbWriteQueue? writeQueue = null)
     {
         _server = server;
-        _scopeFactory = scopeFactory;
+        _writeQueue = writeQueue;
     }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
@@ -77,19 +76,7 @@ public sealed class PartHandler : ICommandHandler
 
             // Delete channel from database when it becomes empty
             if (channelRemoved)
-                await DeleteChannelAsync(name);
+                _writeQueue?.TryWrite(new DeleteChannel(name));
         }
-    }
-
-    private async ValueTask DeleteChannelAsync(string name)
-    {
-        if (_scopeFactory == null) return;
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var channels = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-            await channels.DeleteAsync(name);
-        }
-        catch { /* DB persistence failure should not break channel operations */ }
     }
 }

@@ -50,6 +50,7 @@ public sealed class NickHandler : ICommandHandler
 
         var oldNick = session.Info.Nickname;
         session.Info.Nickname = newNick;
+        _server.UpdateNickIndex(oldNick, newNick, session);
 
         if (session.State >= SessionState.Registered && oldNick != null)
         {
