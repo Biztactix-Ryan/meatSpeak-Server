@@ -174,4 +174,73 @@ public class IrcLineTests
         Assert.Equal("PING", msg.Command);
         Assert.Empty(msg.Parameters);
     }
+
+    // Tests for malformed inputs that could cause index out-of-range
+    [Fact]
+    public void MalformedTagsOnly_ReturnsFalse()
+    {
+        // Tag marker with no space after
+        var result = Parse("@", out _);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MalformedTagsFollowedBySpacesOnly_ReturnsFalse()
+    {
+        // Tag marker followed only by spaces
+        var result = Parse("@tag   ", out _);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MalformedPrefixOnly_ReturnsFalse()
+    {
+        // Prefix marker with no space after
+        var result = Parse(":", out _);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MalformedPrefixFollowedBySpacesOnly_ReturnsFalse()
+    {
+        // Prefix marker followed only by spaces
+        var result = Parse(":prefix   ", out _);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MalformedTagsAndPrefixOnly_ReturnsFalse()
+    {
+        // Tags and prefix with no command
+        var result = Parse("@tag :prefix", out _);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MalformedTagsAndPrefixWithSpacesOnly_ReturnsFalse()
+    {
+        // Tags and prefix followed only by spaces
+        var result = Parse("@tag :prefix   ", out _);
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void CommandWithOnlySpacesAfter_ParsesCommandOnly()
+    {
+        var result = Parse("PING   ", out var parts);
+        Assert.True(result);
+        Assert.Equal("PING", Encoding.UTF8.GetString(parts.Command));
+    }
+
+    [Fact]
+    public void TrailingColonAtEndWithNoTrailingText_HasEmptyTrailing()
+    {
+        // Command followed by space and colon with nothing after
+        var result = Parse("PRIVMSG #channel :", out var parts);
+        Assert.True(result);
+        Assert.Equal("PRIVMSG", Encoding.UTF8.GetString(parts.Command));
+        Assert.Equal("#channel", Encoding.UTF8.GetString(parts.ParamsRaw));
+        Assert.True(parts.HasTrailing);
+        Assert.True(parts.Trailing.IsEmpty);
+    }
 }

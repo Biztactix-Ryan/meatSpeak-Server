@@ -16,7 +16,7 @@ public static class IrcLine
         var remaining = line;
 
         // Parse tags: @tags<space>
-        if (remaining[0] == IrcConstants.At)
+        if (remaining.Length > 0 && remaining[0] == IrcConstants.At)
         {
             remaining = remaining[1..]; // skip @
             int spaceIdx = remaining.IndexOf(IrcConstants.Space);
@@ -61,7 +61,7 @@ public static class IrcLine
         // Parse params: look for :trailing
         // Find " :" sequence that starts trailing (or ":" at start of remaining params)
         int trailingStart = -1;
-        if (remaining[0] == IrcConstants.Colon)
+        if (remaining.Length > 0 && remaining[0] == IrcConstants.Colon)
         {
             // Trailing starts immediately
             parts.Trailing = remaining[1..];
