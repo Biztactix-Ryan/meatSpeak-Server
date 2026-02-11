@@ -2,6 +2,7 @@ namespace MeatSpeak.Server.Data.Configuration;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MeatSpeak.Server.Data.Entities;
 
 public sealed class AuditLogEntityConfiguration : IEntityTypeConfiguration<AuditLogEntity>
@@ -15,7 +16,9 @@ public sealed class AuditLogEntityConfiguration : IEntityTypeConfiguration<Audit
         builder.Property(e => e.Actor).HasMaxLength(64).IsRequired();
         builder.Property(e => e.Target).HasMaxLength(256);
         builder.Property(e => e.Details).HasMaxLength(2048);
-        builder.Property(e => e.Timestamp);
+
+        // Store DateTimeOffset as ticks (long) for SQLite compatibility
+        builder.Property(e => e.Timestamp).HasConversion(new DateTimeOffsetToBinaryConverter());
         builder.HasIndex(e => e.Timestamp);
         builder.HasIndex(e => e.Actor);
     }

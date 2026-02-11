@@ -22,6 +22,19 @@ public sealed class TlsConfig
     public string? CertPassword { get; set; }
 }
 
+public sealed class DatabaseConfig
+{
+    /// <summary>
+    /// Database provider: "sqlite" (default), "postgresql", or "mysql".
+    /// </summary>
+    public string Provider { get; set; } = "sqlite";
+
+    /// <summary>
+    /// Connection string. If empty, defaults to "Data Source=meatspeak.db" for SQLite.
+    /// </summary>
+    public string? ConnectionString { get; set; }
+}
+
 public sealed class AdminApiConfig
 {
     public List<AdminApiKeyEntry> ApiKeys { get; set; } = new();
@@ -56,6 +69,7 @@ public sealed class ServerConfig
     public string WebSocketPath { get; set; } = "/irc";
     public string? OperName { get; set; }
     public string? OperPassword { get; set; }
+    public DatabaseConfig Database { get; set; } = new();
     public TlsConfig Tls { get; set; } = new();
     public AdminApiConfig AdminApi { get; set; } = new();
 }

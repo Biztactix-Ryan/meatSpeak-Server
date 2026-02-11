@@ -10,17 +10,23 @@ public sealed class BanRepository : IBanRepository
     public BanRepository(MeatSpeakDbContext db) => _db = db;
 
     public async Task<IReadOnlyList<ServerBanEntity>> GetAllActiveAsync(CancellationToken ct = default)
-        => await _db.ServerBans
-            .Where(b => b.ExpiresAt == null || b.ExpiresAt > DateTimeOffset.UtcNow)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return await _db.ServerBans
+            .Where(b => b.ExpiresAt == null || b.ExpiresAt > now)
             .OrderByDescending(b => b.SetAt)
             .ToListAsync(ct);
+    }
 
     public async Task<ServerBanEntity?> GetByIdAsync(Guid id, CancellationToken ct = default)
         => await _db.ServerBans.FindAsync(new object[] { id }, ct);
 
     public async Task<bool> IsBannedAsync(string mask, CancellationToken ct = default)
-        => await _db.ServerBans
-            .AnyAsync(b => b.Mask == mask && (b.ExpiresAt == null || b.ExpiresAt > DateTimeOffset.UtcNow), ct);
+    {
+        var now = DateTimeOffset.UtcNow;
+        return await _db.ServerBans
+            .AnyAsync(b => b.Mask == mask && (b.ExpiresAt == null || b.ExpiresAt > now), ct);
+    }
 
     public async Task AddAsync(ServerBanEntity ban, CancellationToken ct = default)
     {
