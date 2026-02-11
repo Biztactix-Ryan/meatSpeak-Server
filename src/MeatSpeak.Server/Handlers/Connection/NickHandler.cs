@@ -53,9 +53,34 @@ public sealed class NickHandler : ICommandHandler
 
         if (session.State >= SessionState.Registered && oldNick != null)
         {
-            // Notify the user and all shared channels
             var prefix = $"{oldNick}!{session.Info.Username}@{session.Info.Hostname}";
+
+            // Broadcast to all users sharing a channel (deduplicated), plus the user themselves
+            var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { session.Id };
             await session.SendMessageAsync(prefix, IrcConstants.NICK, newNick);
+
+            foreach (var channelName in session.Info.Channels)
+            {
+                if (_server.Channels.TryGetValue(channelName, out var channel))
+                {
+                    // Update channel membership key: remove old nick, re-add with new nick
+                    var membership = channel.GetMember(oldNick);
+                    if (membership != null)
+                    {
+                        channel.RemoveMember(oldNick);
+                        membership.Nickname = newNick;
+                        channel.AddMember(newNick, membership);
+                    }
+
+                    foreach (var (memberNick, _) in channel.Members)
+                    {
+                        var memberSession = _server.FindSessionByNick(memberNick);
+                        if (memberSession != null && notified.Add(memberSession.Id))
+                            await memberSession.SendMessageAsync(prefix, IrcConstants.NICK, newNick);
+                    }
+                }
+            }
+
             _server.Events.Publish(new NickChangedEvent(session.Id, oldNick, newNick));
         }
 

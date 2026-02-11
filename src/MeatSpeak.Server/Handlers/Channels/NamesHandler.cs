@@ -13,9 +13,39 @@ public sealed class NamesHandler : ICommandHandler
 
     public NamesHandler(IServer server) => _server = server;
 
-    public ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
+    public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        // TODO: Implement
-        return ValueTask.CompletedTask;
+        if (message.Parameters.Count >= 1)
+        {
+            var channelNames = message.GetParam(0)!.Split(',');
+            foreach (var rawName in channelNames)
+            {
+                var name = rawName.Trim();
+                if (string.IsNullOrEmpty(name))
+                    continue;
+
+                if (_server.Channels.TryGetValue(name, out var channel))
+                {
+                    await JoinHandler.SendNamesReply(session, channel, _server.Config.ServerName);
+                }
+                else
+                {
+                    await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_ENDOFNAMES,
+                        name, "End of /NAMES list");
+                }
+            }
+        }
+        else
+        {
+            // No channel specified - list all visible users
+            foreach (var channel in _server.Channels.Values)
+            {
+                if (channel.Modes.Contains('s') && !channel.IsMember(session.Info.Nickname!))
+                    continue;
+                await JoinHandler.SendNamesReply(session, channel, _server.Config.ServerName);
+            }
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_ENDOFNAMES,
+                "*", "End of /NAMES list");
+        }
     }
 }

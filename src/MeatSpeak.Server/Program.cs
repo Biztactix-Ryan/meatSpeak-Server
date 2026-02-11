@@ -81,7 +81,7 @@ server.Commands.Register(new CapHandler(server, registration));
 server.Commands.Register(new PrivmsgHandler(server));
 server.Commands.Register(new NoticeHandler(server));
 
-// Channel handlers (stubs)
+// Channel handlers
 server.Commands.Register(new JoinHandler(server));
 server.Commands.Register(new PartHandler(server));
 server.Commands.Register(new ModeHandler(server));
@@ -99,8 +99,8 @@ server.Commands.Register(new LusersHandler(server, numerics));
 server.Commands.Register(new VersionHandler(server));
 
 // Operator handlers
-server.Commands.Register(new OperHandler());
-server.Commands.Register(new KillHandler());
+server.Commands.Register(new OperHandler(server));
+server.Commands.Register(new KillHandler(server));
 server.Commands.Register(new RehashHandler(server));
 
 // Voice handler (stub)

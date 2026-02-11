@@ -13,9 +13,19 @@ public sealed class ListHandler : ICommandHandler
 
     public ListHandler(IServer server) => _server = server;
 
-    public ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
+    public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        // TODO: Implement
-        return ValueTask.CompletedTask;
+        foreach (var channel in _server.Channels.Values)
+        {
+            // Skip secret channels unless the user is a member
+            if (channel.Modes.Contains('s') && !channel.IsMember(session.Info.Nickname!))
+                continue;
+
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_LIST,
+                channel.Name, channel.Members.Count.ToString(), channel.Topic ?? "");
+        }
+
+        await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_LISTEND,
+            "End of /LIST");
     }
 }

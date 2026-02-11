@@ -109,18 +109,36 @@ public sealed class IrcConnectionHandler : IConnectionHandler
 
         _server.RemoveSession(session.Id);
 
-        // Remove from all channels
+        // Broadcast QUIT to all users sharing channels (deduplicated)
+        var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var quitReason = "Connection closed";
         foreach (var channelName in session.Info.Channels.ToList())
         {
             if (_server.Channels.TryGetValue(channelName, out var channel))
             {
+                foreach (var (memberNick, _) in channel.Members)
+                {
+                    if (session.Info.Nickname != null &&
+                        string.Equals(memberNick, session.Info.Nickname, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (notified.Add(memberNick))
+                    {
+                        var memberSession = _server.FindSessionByNick(memberNick);
+                        if (memberSession != null)
+                        {
+                            memberSession.SendMessageAsync(
+                                session.Info.Prefix, IrcConstants.QUIT, quitReason).AsTask().Wait();
+                        }
+                    }
+                }
+
                 channel.RemoveMember(session.Info.Nickname!);
                 if (channel.Members.Count == 0)
                     _server.RemoveChannel(channelName);
             }
         }
 
-        _server.Events.Publish(new SessionDisconnectedEvent(session.Id, "Connection closed"));
+        _server.Events.Publish(new SessionDisconnectedEvent(session.Id, quitReason));
         _logger.LogInformation("Client disconnected: {Id}", session.Id);
     }
 }

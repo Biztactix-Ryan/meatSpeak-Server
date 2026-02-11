@@ -10,6 +10,7 @@ public sealed class SessionInfo
     public string? Hostname { get; set; }
     public string? Account { get; set; }
     public string? ServerPassword { get; set; }
+    public HashSet<char> UserModes { get; } = new();
     public HashSet<string> Channels { get; } = new(StringComparer.OrdinalIgnoreCase);
     public CapNegotiationState CapState { get; } = new();
     public DateTimeOffset ConnectedAt { get; set; } = DateTimeOffset.UtcNow;

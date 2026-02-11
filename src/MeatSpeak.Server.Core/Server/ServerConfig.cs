@@ -16,4 +16,6 @@ public sealed class ServerConfig
     public int PingInterval { get; set; } = 60;
     public int PingTimeout { get; set; } = 180;
     public string Version { get; set; } = "meatspeak-0.1.0";
+    public string? OperName { get; set; }
+    public string? OperPassword { get; set; }
 }
