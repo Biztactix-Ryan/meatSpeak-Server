@@ -101,7 +101,7 @@ public class MessageBuilderTests
         int written = MessageBuilder.WriteNumeric(buffer, "server", 353, "nick", "= #channel", "nick1 nick2 nick3");
 
         var output = Encoding.UTF8.GetString(buffer, 0, written);
-        // WriteNumeric always adds : before the last param
+        // Last param has spaces, so colon is added
         Assert.Contains(":server 353 nick", output);
         Assert.EndsWith("\r\n", output);
     }
@@ -137,5 +137,60 @@ public class MessageBuilderTests
         Assert.Equal("001", msg.Command);
         Assert.Equal("testnick", msg.Parameters[0]);
         Assert.Equal("Welcome to the network", msg.Parameters[1]);
+    }
+
+    [Fact]
+    public void WriteNumeric_LastParamWithoutSpaces_NoColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "server", 376, "nick", "EndOfMOTD");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":server 376 nick EndOfMOTD\r\n", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_LastParamWithSpaces_AddsColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "server", 372, "nick", "- Message of the day");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":server 372 nick :- Message of the day\r\n", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_EmptyLastParam_AddsColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "server", 331, "nick", "#channel", "");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":server 331 nick #channel :\r\n", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_LastParamStartsWithColon_AddsColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "server", 332, "nick", "#channel", ":Topic");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":server 332 nick #channel ::Topic\r\n", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_SingleWordParam_NoColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "server", 221, "nick", "+i");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":server 221 nick +i\r\n", output);
     }
 }

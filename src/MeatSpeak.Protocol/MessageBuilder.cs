@@ -55,7 +55,7 @@ public static class MessageBuilder
         {
             buffer[pos++] = IrcConstants.Space;
             bool isLast = i == parameters.Length - 1;
-            if (isLast)
+            if (isLast && (parameters[i].Contains(' ') || parameters[i].Length == 0 || parameters[i][0] == ':'))
                 buffer[pos++] = IrcConstants.Colon;
             pos += Encoding.UTF8.GetBytes(parameters[i], buffer[pos..]);
         }
