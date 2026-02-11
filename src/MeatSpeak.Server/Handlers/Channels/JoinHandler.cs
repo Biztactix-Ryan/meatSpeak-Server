@@ -78,8 +78,8 @@ public sealed class JoinHandler : ICommandHandler
             return;
         }
 
-        // Check ban list
-        if (channel.IsBanned(session.Info.Prefix))
+        // Check ban list (skip if user matches an exception)
+        if (channel.IsBanned(session.Info.Prefix) && !channel.IsExcepted(session.Info.Prefix))
         {
             await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_BANNEDFROMCHAN,
                 name, "Cannot join channel (+b)");

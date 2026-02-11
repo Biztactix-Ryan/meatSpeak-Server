@@ -7,6 +7,7 @@ public sealed class ChannelImpl : IChannel
 {
     private readonly ConcurrentDictionary<string, ChannelMembership> _members = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<BanEntry> _bans = new();
+    private readonly List<BanEntry> _excepts = new();
     private readonly HashSet<string> _invites = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
 
@@ -28,6 +29,11 @@ public sealed class ChannelImpl : IChannel
     public IReadOnlyList<string> InviteList
     {
         get { lock (_lock) return _invites.ToList(); }
+    }
+
+    public IReadOnlyList<BanEntry> Excepts
+    {
+        get { lock (_lock) return _excepts.ToList(); }
     }
 
     public ChannelImpl(string name)
@@ -77,5 +83,25 @@ public sealed class ChannelImpl : IChannel
     public bool IsInvited(string nickname)
     {
         lock (_lock) return _invites.Contains(nickname);
+    }
+
+    public void AddExcept(BanEntry except)
+    {
+        lock (_lock) _excepts.Add(except);
+    }
+
+    public bool RemoveExcept(string mask)
+    {
+        lock (_lock)
+        {
+            var idx = _excepts.FindIndex(e => string.Equals(e.Mask, mask, StringComparison.OrdinalIgnoreCase));
+            if (idx >= 0) { _excepts.RemoveAt(idx); return true; }
+            return false;
+        }
+    }
+
+    public bool IsExcepted(string mask)
+    {
+        lock (_lock) return _excepts.Any(e => string.Equals(e.Mask, mask, StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -276,6 +276,282 @@ public class AdminMethodTests
         await perms.Received().CreateRoleAsync("Mod", 50, (ServerPermission)1, (ChannelPermission)1, Arg.Any<CancellationToken>());
     }
 
+    // Enhanced channel.create tests
+
+    [Fact]
+    public async Task ChannelCreate_WithModes_AppliesModes()
+    {
+        var modes = new HashSet<char> { 'n', 't' };
+        var channel = Substitute.For<IChannel>();
+        channel.Modes.Returns(modes);
+        _server.GetOrCreateChannel("#new").Returns(channel);
+
+        var method = new ChannelCreateMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#new","modes":"+imV"}""").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        Assert.Contains('i', modes);
+        Assert.Contains('m', modes);
+        Assert.Contains('V', modes);
+    }
+
+    [Fact]
+    public async Task ChannelCreate_WithKey_SetsKey()
+    {
+        var modes = new HashSet<char> { 'n', 't' };
+        var channel = Substitute.For<IChannel>();
+        channel.Modes.Returns(modes);
+        _server.GetOrCreateChannel("#new").Returns(channel);
+
+        var method = new ChannelCreateMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#new","key":"secret"}""").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        channel.Received().Key = "secret";
+        Assert.Contains('k', modes);
+    }
+
+    [Fact]
+    public async Task ChannelCreate_WithUserLimit_SetsLimit()
+    {
+        var modes = new HashSet<char> { 'n', 't' };
+        var channel = Substitute.For<IChannel>();
+        channel.Modes.Returns(modes);
+        _server.GetOrCreateChannel("#new").Returns(channel);
+
+        var method = new ChannelCreateMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#new","user_limit":50}""").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        channel.Received().UserLimit = 50;
+        Assert.Contains('l', modes);
+    }
+
+    // Channel ban admin API tests
+
+    [Fact]
+    public async Task ChannelBans_ReturnsBanList()
+    {
+        var channel = Substitute.For<IChannel>();
+        channel.Name.Returns("#test");
+        channel.Bans.Returns(new List<BanEntry>
+        {
+            new("*!*@bad.host", "admin", DateTimeOffset.UtcNow)
+        });
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelBansMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("bad.host", json);
+    }
+
+    [Fact]
+    public async Task ChannelBansAdd_AddsBan()
+    {
+        var channel = Substitute.For<IChannel>();
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelBansAddMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","mask":"*!*@evil.host","set_by":"admin"}""").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        channel.Received().AddBan(Arg.Is<BanEntry>(b => b.Mask == "*!*@evil.host" && b.SetBy == "admin"));
+    }
+
+    [Fact]
+    public async Task ChannelBansRemove_RemovesBan()
+    {
+        var channel = Substitute.For<IChannel>();
+        channel.RemoveBan("*!*@evil.host").Returns(true);
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelBansRemoveMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","mask":"*!*@evil.host"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("ok", json);
+    }
+
+    [Fact]
+    public async Task ChannelBansRemove_NotFound_ReturnsNotFound()
+    {
+        var channel = Substitute.For<IChannel>();
+        channel.RemoveBan("*!*@missing.host").Returns(false);
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelBansRemoveMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","mask":"*!*@missing.host"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("not_found", json);
+    }
+
+    // Channel exception admin API tests
+
+    [Fact]
+    public async Task ChannelExcepts_ReturnsExceptList()
+    {
+        var channel = Substitute.For<IChannel>();
+        channel.Name.Returns("#test");
+        channel.Excepts.Returns(new List<BanEntry>
+        {
+            new("*!friend@bad.host", "admin", DateTimeOffset.UtcNow)
+        });
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelExceptsMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("friend@bad.host", json);
+    }
+
+    [Fact]
+    public async Task ChannelExceptsAdd_AddsExcept()
+    {
+        var channel = Substitute.For<IChannel>();
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelExceptsAddMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","mask":"*!friend@bad.host"}""").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        channel.Received().AddExcept(Arg.Is<BanEntry>(e => e.Mask == "*!friend@bad.host"));
+    }
+
+    [Fact]
+    public async Task ChannelExceptsRemove_RemovesExcept()
+    {
+        var channel = Substitute.For<IChannel>();
+        channel.RemoveExcept("*!friend@bad.host").Returns(true);
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelExceptsRemoveMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","mask":"*!friend@bad.host"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("ok", json);
+    }
+
+    // Channel member mode admin API tests
+
+    [Fact]
+    public async Task ChannelMemberMode_SetsVoice()
+    {
+        var membership = new ChannelMembership { Nickname = "user1" };
+        var channel = Substitute.For<IChannel>();
+        channel.GetMember("user1").Returns(membership);
+        channel.Members.Returns(new Dictionary<string, ChannelMembership> { ["user1"] = membership });
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelMemberModeMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","nick":"user1","modes":"+v"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+
+        Assert.True(membership.HasVoice);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("ok", json);
+    }
+
+    [Fact]
+    public async Task ChannelMemberMode_SetsOperator()
+    {
+        var membership = new ChannelMembership { Nickname = "user1" };
+        var channel = Substitute.For<IChannel>();
+        channel.GetMember("user1").Returns(membership);
+        channel.Members.Returns(new Dictionary<string, ChannelMembership> { ["user1"] = membership });
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelMemberModeMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","nick":"user1","modes":"+o"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+
+        Assert.True(membership.IsOperator);
+    }
+
+    [Fact]
+    public async Task ChannelMemberMode_RemovesVoice()
+    {
+        var membership = new ChannelMembership { Nickname = "user1", HasVoice = true };
+        var channel = Substitute.For<IChannel>();
+        channel.GetMember("user1").Returns(membership);
+        channel.Members.Returns(new Dictionary<string, ChannelMembership> { ["user1"] = membership });
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelMemberModeMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","nick":"user1","modes":"-v"}""").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        Assert.False(membership.HasVoice);
+    }
+
+    [Fact]
+    public async Task ChannelMemberMode_UserNotInChannel_ReturnsError()
+    {
+        var channel = Substitute.For<IChannel>();
+        channel.GetMember("ghost").Returns((ChannelMembership?)null);
+        _server.Channels.Returns(new Dictionary<string, IChannel> { ["#test"] = channel });
+
+        var method = new ChannelMemberModeMethod(_server);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test","nick":"ghost","modes":"+v"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("user_not_in_channel", json);
+    }
+
+    // Channel permission admin API tests
+
+    [Fact]
+    public async Task ChannelPermissions_ReturnsOverrides()
+    {
+        var perms = Substitute.For<IPermissionService>();
+        var roleId = Guid.NewGuid();
+        perms.GetChannelOverridesAsync("#test", Arg.Any<CancellationToken>()).Returns(new List<ChannelOverride>
+        {
+            new(roleId, "#test", ChannelPermission.SendMessages, ChannelPermission.None)
+        });
+        perms.GetAllRolesAsync(Arg.Any<CancellationToken>()).Returns(new List<Role>
+        {
+            new(roleId, "Mod", 50, ServerPermission.None, ChannelPermission.None)
+        });
+
+        var method = new ChannelPermissionsMethod(perms);
+        var paramsJson = JsonDocument.Parse("""{"channel":"#test"}""").RootElement;
+        var result = await method.ExecuteAsync(paramsJson);
+        var json = JsonSerializer.Serialize(result);
+        Assert.Contains("Mod", json);
+    }
+
+    [Fact]
+    public async Task ChannelPermissionsSet_SetsOverride()
+    {
+        var perms = Substitute.For<IPermissionService>();
+        var roleId = Guid.NewGuid();
+
+        var method = new ChannelPermissionsSetMethod(perms);
+        var paramsJson = JsonDocument.Parse($"{{\"channel\":\"#test\",\"role_id\":\"{roleId}\",\"allow\":3,\"deny\":0}}").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        await perms.Received().SetChannelOverrideAsync(
+            Arg.Is<ChannelOverride>(o => o.RoleId == roleId && o.ChannelName == "#test" && o.Allow == (ChannelPermission)3),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ChannelPermissionsDelete_DeletesOverride()
+    {
+        var perms = Substitute.For<IPermissionService>();
+        var roleId = Guid.NewGuid();
+
+        var method = new ChannelPermissionsDeleteMethod(perms);
+        var paramsJson = JsonDocument.Parse($"{{\"channel\":\"#test\",\"role_id\":\"{roleId}\"}}").RootElement;
+        await method.ExecuteAsync(paramsJson);
+
+        await perms.Received().DeleteChannelOverrideAsync(roleId, "#test", Arg.Any<CancellationToken>());
+    }
+
     // Audit methods
 
     [Fact]

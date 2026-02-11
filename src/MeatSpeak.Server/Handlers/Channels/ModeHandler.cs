@@ -151,6 +151,11 @@ public sealed class ModeHandler : ICommandHandler
                     if (adding || paramIdx < message.Parameters.Count)
                         paramIdx++;
                     break;
+                case 'e':
+                    await HandleExceptMode(session, channel, adding, message, paramIdx, appliedModes);
+                    if (adding || paramIdx < message.Parameters.Count)
+                        paramIdx++;
+                    break;
                 case 'k':
                     HandleKeyMode(channel, adding, message, paramIdx, appliedModes);
                     paramIdx++;
@@ -225,6 +230,38 @@ public sealed class ModeHandler : ICommandHandler
         {
             if (channel.RemoveBan(mask))
                 appliedModes.Add((false, 'b', mask));
+        }
+    }
+
+    private async ValueTask HandleExceptMode(ISession session, IChannel channel, bool adding, IrcMessage message,
+        int paramIdx, List<(bool adding, char mode, string? param)> appliedModes)
+    {
+        if (!adding && paramIdx >= message.Parameters.Count)
+            return;
+
+        if (adding && paramIdx >= message.Parameters.Count)
+        {
+            // List exceptions
+            foreach (var except in channel.Excepts)
+            {
+                await session.SendNumericAsync(_server.Config.ServerName, 348,
+                    channel.Name, except.Mask, except.SetBy, except.SetAt.ToUnixTimeSeconds().ToString());
+            }
+            await session.SendNumericAsync(_server.Config.ServerName, 349,
+                channel.Name, "End of channel exception list");
+            return;
+        }
+
+        var mask = message.GetParam(paramIdx)!;
+        if (adding)
+        {
+            channel.AddExcept(new BanEntry(mask, session.Info.Nickname!, DateTimeOffset.UtcNow));
+            appliedModes.Add((true, 'e', mask));
+        }
+        else
+        {
+            if (channel.RemoveExcept(mask))
+                appliedModes.Add((false, 'e', mask));
         }
     }
 

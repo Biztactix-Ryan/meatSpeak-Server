@@ -204,6 +204,24 @@ builder.Services.AddSingleton<IAdminMethod, ChannelTopicMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelModeMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelCreateMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelDeleteMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelMemberModeMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelBansMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelBansAddMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelBansRemoveMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelExceptsMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelExceptsAddMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelExceptsRemoveMethod>();
+
+// Channel permission override methods (DB-dependent)
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("channel.permissions", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new ChannelPermissionsMethod(svc.GetRequiredService<IPermissionService>())));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("channel.permissions.set", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new ChannelPermissionsSetMethod(svc.GetRequiredService<IPermissionService>())));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("channel.permissions.delete", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new ChannelPermissionsDeleteMethod(svc.GetRequiredService<IPermissionService>())));
 
 // DB-dependent methods use ScopedMethod to create a fresh DI scope per call
 builder.Services.AddSingleton<IAdminMethod>(sp =>

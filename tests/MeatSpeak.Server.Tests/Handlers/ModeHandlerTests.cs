@@ -393,4 +393,75 @@ public class ModeHandlerTests
         await session.Received().SendNumericAsync("test.server", 367, Arg.Any<string[]>());
         await session.Received().SendNumericAsync("test.server", 368, Arg.Any<string[]>());
     }
+
+    // --- Ban exception (+e) tests ---
+
+    [Fact]
+    public async Task HandleAsync_ChannelModeAddExcept_AddsExcept()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+e", "*!friend@bad.host" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Single(channel.Excepts);
+        Assert.Equal("*!friend@bad.host", channel.Excepts[0].Mask);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelModeRemoveExcept_RemovesExcept()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddExcept(new BanEntry("*!friend@bad.host", "Op", DateTimeOffset.UtcNow));
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "-e", "*!friend@bad.host" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Empty(channel.Excepts);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelModeListExcepts_ListsExcepts()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddExcept(new BanEntry("*!friend@bad.host", "Op", DateTimeOffset.UtcNow));
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // +e with no param lists exceptions
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+e" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // 348 = exception list entry, 349 = end of exception list
+        await session.Received().SendNumericAsync("test.server", 348, Arg.Any<string[]>());
+        await session.Received().SendNumericAsync("test.server", 349, Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelModeAddExcept_BroadcastsToMembers()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        channel.AddMember("Other", new ChannelMembership { Nickname = "Other" });
+        _channels["#test"] = channel;
+
+        var opSession = CreateSession("Op");
+        var otherSession = CreateSession("Other");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+e", "*!friend@bad.host" });
+
+        await _handler.HandleAsync(opSession, msg);
+
+        await otherSession.Received().SendMessageAsync(
+            Arg.Any<string>(), "MODE", Arg.Any<string[]>());
+    }
 }

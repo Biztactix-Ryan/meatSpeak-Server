@@ -53,6 +53,7 @@ public sealed class ModeRegistry
     {
         // Standard IRC channel modes
         RegisterChannelMode(new ModeDefinition('b', ModeType.A, "ban"));
+        RegisterChannelMode(new ModeDefinition('e', ModeType.A, "ban-exception"));
         RegisterChannelMode(new ModeDefinition('k', ModeType.B, "key"));
         RegisterChannelMode(new ModeDefinition('l', ModeType.C, "limit"));
         RegisterChannelMode(new ModeDefinition('i', ModeType.D, "invite-only"));

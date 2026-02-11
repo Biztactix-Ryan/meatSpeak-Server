@@ -13,6 +13,7 @@ public interface IChannel
     int? UserLimit { get; set; }
     IReadOnlyList<BanEntry> Bans { get; }
     IReadOnlyList<string> InviteList { get; }
+    IReadOnlyList<BanEntry> Excepts { get; }
 
     bool AddMember(string nickname, ChannelMembership membership);
     bool RemoveMember(string nickname);
@@ -23,4 +24,7 @@ public interface IChannel
     bool IsBanned(string mask);
     void AddInvite(string nickname);
     bool IsInvited(string nickname);
+    void AddExcept(BanEntry except);
+    bool RemoveExcept(string mask);
+    bool IsExcepted(string mask);
 }

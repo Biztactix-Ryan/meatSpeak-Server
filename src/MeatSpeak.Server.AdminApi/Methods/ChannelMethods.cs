@@ -1,7 +1,9 @@
 namespace MeatSpeak.Server.AdminApi.Methods;
 
 using System.Text.Json;
+using MeatSpeak.Server.Core.Channels;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Permissions;
 
 public sealed class ChannelListMethod : IAdminMethod
 {
@@ -158,6 +160,40 @@ public sealed class ChannelCreateMethod : IAdminMethod
             channel.TopicSetAt = DateTimeOffset.UtcNow;
         }
 
+        if (parameters.Value.TryGetProperty("modes", out var modesEl))
+        {
+            var modes = modesEl.GetString();
+            if (modes != null)
+            {
+                bool adding = true;
+                foreach (var c in modes)
+                {
+                    if (c == '+') { adding = true; continue; }
+                    if (c == '-') { adding = false; continue; }
+                    if (adding)
+                        channel.Modes.Add(c);
+                    else
+                        channel.Modes.Remove(c);
+                }
+            }
+        }
+
+        if (parameters.Value.TryGetProperty("key", out var keyEl))
+        {
+            channel.Key = keyEl.GetString();
+            if (channel.Key != null)
+                channel.Modes.Add('k');
+        }
+
+        if (parameters.Value.TryGetProperty("user_limit", out var limitEl) && limitEl.TryGetInt32(out var limit))
+        {
+            channel.UserLimit = limit > 0 ? limit : null;
+            if (channel.UserLimit.HasValue)
+                channel.Modes.Add('l');
+            else
+                channel.Modes.Remove('l');
+        }
+
         return Task.FromResult<object?>(new { status = "ok", channel = chanName });
     }
 }
@@ -198,5 +234,302 @@ public sealed class ChannelDeleteMethod : IAdminMethod
 
         _server.RemoveChannel(chanName);
         return new { status = "ok" };
+    }
+}
+
+public sealed class ChannelPermissionsMethod : IAdminMethod
+{
+    private readonly IPermissionService _permissions;
+    public string Name => "channel.permissions";
+    public ChannelPermissionsMethod(IPermissionService permissions) => _permissions = permissions;
+
+    public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+
+        var overrides = await _permissions.GetChannelOverridesAsync(chanName, ct);
+        var roles = await _permissions.GetAllRolesAsync(ct);
+        var roleMap = roles.ToDictionary(r => r.Id);
+
+        return new
+        {
+            channel = chanName,
+            overrides = overrides.Select(o => new
+            {
+                role_id = o.RoleId,
+                role_name = roleMap.TryGetValue(o.RoleId, out var r) ? r.Name : null,
+                allow = (ulong)o.Allow,
+                deny = (ulong)o.Deny,
+            }).ToList(),
+        };
+    }
+}
+
+public sealed class ChannelPermissionsSetMethod : IAdminMethod
+{
+    private readonly IPermissionService _permissions;
+    public string Name => "channel.permissions.set";
+    public ChannelPermissionsSetMethod(IPermissionService permissions) => _permissions = permissions;
+
+    public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var roleId = parameters.Value.GetProperty("role_id").GetGuid();
+        var allow = parameters.Value.TryGetProperty("allow", out var allowEl) ? allowEl.GetUInt64() : 0UL;
+        var deny = parameters.Value.TryGetProperty("deny", out var denyEl) ? denyEl.GetUInt64() : 0UL;
+
+        await _permissions.SetChannelOverrideAsync(new ChannelOverride(roleId, chanName,
+            (ChannelPermission)allow, (ChannelPermission)deny), ct);
+
+        return new { status = "ok" };
+    }
+}
+
+public sealed class ChannelPermissionsDeleteMethod : IAdminMethod
+{
+    private readonly IPermissionService _permissions;
+    public string Name => "channel.permissions.delete";
+    public ChannelPermissionsDeleteMethod(IPermissionService permissions) => _permissions = permissions;
+
+    public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var roleId = parameters.Value.GetProperty("role_id").GetGuid();
+
+        await _permissions.DeleteChannelOverrideAsync(roleId, chanName, ct);
+
+        return new { status = "ok" };
+    }
+}
+
+public sealed class ChannelMemberModeMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.member.mode";
+    public ChannelMemberModeMethod(IServer server) => _server = server;
+
+    public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var nick = parameters.Value.GetProperty("nick").GetString()
+            ?? throw new JsonException("Missing 'nick'");
+        var modes = parameters.Value.GetProperty("modes").GetString()
+            ?? throw new JsonException("Missing 'modes'");
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return new { error = "channel_not_found" };
+
+        var membership = channel.GetMember(nick);
+        if (membership == null)
+            return new { error = "user_not_in_channel" };
+
+        bool adding = true;
+        var applied = new List<string>();
+        foreach (var c in modes)
+        {
+            if (c == '+') { adding = true; continue; }
+            if (c == '-') { adding = false; continue; }
+            switch (c)
+            {
+                case 'o':
+                    membership.IsOperator = adding;
+                    applied.Add((adding ? "+" : "-") + "o");
+                    break;
+                case 'v':
+                    membership.HasVoice = adding;
+                    applied.Add((adding ? "+" : "-") + "v");
+                    break;
+            }
+        }
+
+        if (applied.Count > 0)
+        {
+            // Broadcast MODE change to channel members
+            var modeStr = string.Join("", applied);
+            foreach (var (memberNick, _) in channel.Members)
+            {
+                var session = _server.FindSessionByNick(memberNick);
+                if (session != null)
+                    await session.SendMessageAsync(_server.Config.ServerName, "MODE", chanName, modeStr, nick);
+            }
+        }
+
+        return new { status = "ok", is_operator = membership.IsOperator, has_voice = membership.HasVoice };
+    }
+}
+
+public sealed class ChannelBansMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.bans";
+    public ChannelBansMethod(IServer server) => _server = server;
+
+    public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return Task.FromResult<object?>(new { error = "channel_not_found" });
+
+        return Task.FromResult<object?>(new
+        {
+            channel = chanName,
+            bans = channel.Bans.Select(b => new
+            {
+                mask = b.Mask,
+                set_by = b.SetBy,
+                set_at = b.SetAt,
+            }).ToList(),
+        });
+    }
+}
+
+public sealed class ChannelBansAddMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.bans.add";
+    public ChannelBansAddMethod(IServer server) => _server = server;
+
+    public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var mask = parameters.Value.GetProperty("mask").GetString()
+            ?? throw new JsonException("Missing 'mask'");
+        var setBy = parameters.Value.TryGetProperty("set_by", out var setByEl)
+            ? setByEl.GetString() ?? "admin" : "admin";
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return Task.FromResult<object?>(new { error = "channel_not_found" });
+
+        channel.AddBan(new BanEntry(mask, setBy, DateTimeOffset.UtcNow));
+        return Task.FromResult<object?>(new { status = "ok" });
+    }
+}
+
+public sealed class ChannelBansRemoveMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.bans.remove";
+    public ChannelBansRemoveMethod(IServer server) => _server = server;
+
+    public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var mask = parameters.Value.GetProperty("mask").GetString()
+            ?? throw new JsonException("Missing 'mask'");
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return Task.FromResult<object?>(new { error = "channel_not_found" });
+
+        var removed = channel.RemoveBan(mask);
+        return Task.FromResult<object?>(new { status = removed ? "ok" : "not_found" });
+    }
+}
+
+public sealed class ChannelExceptsMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.excepts";
+    public ChannelExceptsMethod(IServer server) => _server = server;
+
+    public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return Task.FromResult<object?>(new { error = "channel_not_found" });
+
+        return Task.FromResult<object?>(new
+        {
+            channel = chanName,
+            excepts = channel.Excepts.Select(e => new
+            {
+                mask = e.Mask,
+                set_by = e.SetBy,
+                set_at = e.SetAt,
+            }).ToList(),
+        });
+    }
+}
+
+public sealed class ChannelExceptsAddMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.excepts.add";
+    public ChannelExceptsAddMethod(IServer server) => _server = server;
+
+    public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var mask = parameters.Value.GetProperty("mask").GetString()
+            ?? throw new JsonException("Missing 'mask'");
+        var setBy = parameters.Value.TryGetProperty("set_by", out var setByEl)
+            ? setByEl.GetString() ?? "admin" : "admin";
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return Task.FromResult<object?>(new { error = "channel_not_found" });
+
+        channel.AddExcept(new BanEntry(mask, setBy, DateTimeOffset.UtcNow));
+        return Task.FromResult<object?>(new { status = "ok" });
+    }
+}
+
+public sealed class ChannelExceptsRemoveMethod : IAdminMethod
+{
+    private readonly IServer _server;
+    public string Name => "channel.excepts.remove";
+    public ChannelExceptsRemoveMethod(IServer server) => _server = server;
+
+    public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
+    {
+        if (parameters == null)
+            throw new JsonException("Missing parameters");
+
+        var chanName = parameters.Value.GetProperty("channel").GetString()
+            ?? throw new JsonException("Missing 'channel'");
+        var mask = parameters.Value.GetProperty("mask").GetString()
+            ?? throw new JsonException("Missing 'mask'");
+
+        if (!_server.Channels.TryGetValue(chanName, out var channel))
+            return Task.FromResult<object?>(new { error = "channel_not_found" });
+
+        var removed = channel.RemoveExcept(mask);
+        return Task.FromResult<object?>(new { status = removed ? "ok" : "not_found" });
     }
 }

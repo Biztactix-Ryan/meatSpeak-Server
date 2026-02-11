@@ -203,6 +203,23 @@ public class JoinHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_BannedButExcepted_Joins()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddBan(new BanEntry("TestUser!user@host", "op", DateTimeOffset.UtcNow));
+        channel.AddExcept(new BanEntry("TestUser!user@host", "op", DateTimeOffset.UtcNow));
+        _channels["#test"] = channel;
+        _server.GetOrCreateChannel("#test").Returns(channel);
+
+        var session = CreateSession("TestUser");
+        var msg = new IrcMessage(null, null, "JOIN", new[] { "#test" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.True(channel.IsMember("TestUser"));
+    }
+
+    [Fact]
     public async Task HandleAsync_ChannelFull_SendsError()
     {
         var channel = new ChannelImpl("#full");

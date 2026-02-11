@@ -71,12 +71,12 @@ public class ModeRegistryTests
 
         var result = registry.GetChanModesIsupport();
 
-        // Expected: CHANMODES=b,k,l,ESVimnst
-        // Type A: b
+        // Expected: CHANMODES=be,k,l,ESVimnst
+        // Type A: b,e
         // Type B: k
         // Type C: l
         // Type D: E,S,V,i,m,n,s,t (sorted)
-        Assert.Equal("CHANMODES=b,k,l,ESVimnst", result);
+        Assert.Equal("CHANMODES=be,k,l,ESVimnst", result);
     }
 
     [Fact]
