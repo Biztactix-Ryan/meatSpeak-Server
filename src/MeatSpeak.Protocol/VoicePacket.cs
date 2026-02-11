@@ -8,6 +8,12 @@ public ref struct VoicePacket
 {
     public const int HeaderSize = 13;
     public const byte CurrentVersion = 1;
+    
+    /// <summary>
+    /// Maximum payload size for UDP packets (65000 bytes).
+    /// This is slightly less than the 65507 UDP theoretical limit to account for IP/UDP headers.
+    /// </summary>
+    public const int MaxPayloadSize = 65000;
 
     public byte Version;
     public VoicePacketType Type;
@@ -43,7 +49,19 @@ public ref struct VoicePacket
 
     public static int Write(Span<byte> buffer, VoicePacketType type, VoicePacketFlags flags, uint ssrc, ushort sequence, uint timestamp, ReadOnlySpan<byte> payload)
     {
-        if (buffer.Length < HeaderSize + payload.Length)
+        // Validate payload size doesn't exceed UDP packet limits
+        if (payload.Length > MaxPayloadSize)
+            return -1;
+
+        // Check for integer overflow when adding HeaderSize + payload.Length
+        // Since HeaderSize is a small constant (13) and payload.Length is validated above,
+        // we only need to ensure the sum doesn't overflow int.MaxValue
+        if (payload.Length > int.MaxValue - HeaderSize)
+            return -1;
+
+        int totalSize = HeaderSize + payload.Length;
+        
+        if (buffer.Length < totalSize)
             return -1;
 
         buffer[0] = CurrentVersion;
@@ -54,6 +72,6 @@ public ref struct VoicePacket
         System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(buffer[9..], timestamp);
         payload.CopyTo(buffer[HeaderSize..]);
 
-        return HeaderSize + payload.Length;
+        return totalSize;
     }
 }

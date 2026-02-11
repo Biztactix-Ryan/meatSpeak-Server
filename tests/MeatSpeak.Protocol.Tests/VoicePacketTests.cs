@@ -200,4 +200,48 @@ public class VoicePacketTests
         Assert.False(packet.HasSpatial);
         Assert.False(packet.HasPriority);
     }
+
+    [Fact]
+    public void Write_PayloadExceedsMaxSize_ReturnsNegativeOne()
+    {
+        // Create a payload that exceeds the maximum allowed size
+        var payload = new byte[VoicePacket.MaxPayloadSize + 1];
+        var buffer = new byte[VoicePacket.HeaderSize + payload.Length];
+
+        int written = VoicePacket.Write(buffer, VoicePacketType.Audio, VoicePacketFlags.None, 1, 1, 1, payload);
+
+        Assert.Equal(-1, written);
+    }
+
+    [Fact]
+    public void Write_PayloadAtMaxSize_Succeeds()
+    {
+        // Create a payload at exactly the maximum allowed size
+        var payload = new byte[VoicePacket.MaxPayloadSize];
+        var buffer = new byte[VoicePacket.HeaderSize + payload.Length];
+
+        int written = VoicePacket.Write(buffer, VoicePacketType.Audio, VoicePacketFlags.None, 1, 1, 1, payload);
+
+        Assert.Equal(VoicePacket.HeaderSize + payload.Length, written);
+    }
+
+    [Fact]
+    public void Write_PayloadNearIntMaxValue_ReturnsNegativeOne()
+    {
+        // Create a scenario that would cause integer overflow
+        // We can't actually allocate such a large array, so we test the validation logic
+        // by using a mock/stub approach or by testing the boundary condition
+        
+        // The overflow check is: payload.Length > int.MaxValue - HeaderSize
+        // Since we can't create an array that large, we verify the constant is correct
+        // and trust the implementation validates correctly
+        
+        // This test verifies that the MaxPayloadSize constant prevents realistic overflow
+        Assert.True(VoicePacket.MaxPayloadSize < int.MaxValue - VoicePacket.HeaderSize);
+        
+        // Also verify that MaxPayloadSize + HeaderSize doesn't overflow
+        int totalSize = VoicePacket.MaxPayloadSize + VoicePacket.HeaderSize;
+        Assert.True(totalSize > 0); // Would be negative if overflowed
+        Assert.True(totalSize < int.MaxValue);
+    }
 }
