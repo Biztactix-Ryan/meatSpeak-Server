@@ -162,7 +162,7 @@ public class MessageBuilderTests
     }
 
     [Fact]
-    public void Write_LongMessage_Documentation()
+    public void Write_OversizedMessage_DoesNotEnforceLimit()
     {
         // This test documents that MessageBuilder does NOT enforce the 512-byte limit.
         // Callers are responsible for ensuring messages do not exceed MaxMessageLength (510 bytes)
@@ -180,6 +180,36 @@ public class MessageBuilderTests
         // Format is: :short CMD :AAAA...\r\n
         // = 1 + 5 + 1 + 3 + 1 + 1 + 500 + 2 = 514 bytes
         Assert.True(written > IrcConstants.MaxLineLength,
-            "Long messages currently exceed RFC limit - callers must truncate");
+            "Oversized messages currently exceed RFC limit - callers must validate length");
+    }
+
+    [Fact]
+    public void Write_CallerTruncatesToMaxMessageLength_ProducesRFC1459CompliantLine()
+    {
+        // This test demonstrates the EXPECTED caller behavior: truncating message content
+        // to fit within MaxMessageLength before calling Write.
+        
+        var buffer = new byte[1024];
+        
+        // Caller should calculate the available space for content
+        var prefix = "nick!user@host";
+        var command = "PRIVMSG";
+        var target = "#channel";
+        // Format will be: :prefix COMMAND target :message\r\n
+        // Calculate overhead: : prefix SPACE command SPACE target SPACE : \r\n
+        var overhead = 1 + prefix.Length + 1 + command.Length + 1 + target.Length + 1 + 1 + 2;
+        var maxContentLength = IrcConstants.MaxMessageLength - overhead;
+        
+        // Caller truncates their message to fit
+        var originalMessage = new string('X', 1000); // Very long message
+        var truncatedMessage = originalMessage.Substring(0, maxContentLength);
+        
+        int written = MessageBuilder.Write(buffer, prefix, command, target, truncatedMessage);
+        
+        // Result should be RFC 1459 compliant (≤ 512 bytes)
+        Assert.True(written <= IrcConstants.MaxLineLength,
+            $"Message length {written} should not exceed {IrcConstants.MaxLineLength} when caller truncates properly");
+        Assert.Equal(IrcConstants.CR, buffer[written - 2]);
+        Assert.Equal(IrcConstants.LF, buffer[written - 1]);
     }
 }
