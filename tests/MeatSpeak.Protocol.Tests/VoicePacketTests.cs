@@ -226,17 +226,17 @@ public class VoicePacketTests
     }
 
     [Fact]
-    public void Write_PayloadNearIntMaxValue_ReturnsNegativeOne()
+    public void Write_MaxPayloadSizePreventsIntegerOverflow()
     {
-        // Create a scenario that would cause integer overflow
-        // We can't actually allocate such a large array, so we test the validation logic
-        // by using a mock/stub approach or by testing the boundary condition
+        // This test verifies that the MaxPayloadSize constant is set to a value
+        // that prevents integer overflow when added to HeaderSize.
+        // We cannot directly test the overflow protection code path (line 59-60)
+        // because creating an array larger than int.MaxValue - HeaderSize is not
+        // possible in .NET. However, the overflow check provides defense-in-depth
+        // in case MaxPayloadSize is ever changed or the method is called with
+        // unusual payload structures.
         
-        // The overflow check is: payload.Length > int.MaxValue - HeaderSize
-        // Since we can't create an array that large, we verify the constant is correct
-        // and trust the implementation validates correctly
-        
-        // This test verifies that the MaxPayloadSize constant prevents realistic overflow
+        // Verify that MaxPayloadSize prevents realistic overflow scenarios
         Assert.True(VoicePacket.MaxPayloadSize < int.MaxValue - VoicePacket.HeaderSize);
         
         // Also verify that MaxPayloadSize + HeaderSize doesn't overflow

@@ -54,8 +54,9 @@ public ref struct VoicePacket
             return -1;
 
         // Check for integer overflow when adding HeaderSize + payload.Length
-        // Since HeaderSize is a small constant (13) and payload.Length is validated above,
-        // we only need to ensure the sum doesn't overflow int.MaxValue
+        // This is defense-in-depth: while MaxPayloadSize prevents realistic overflow,
+        // this check ensures safety even if MaxPayloadSize were changed or if the
+        // method were called with a slice of a larger structure
         if (payload.Length > int.MaxValue - HeaderSize)
             return -1;
 
