@@ -6,6 +6,7 @@ using System.Text;
 public sealed class ApiKeyAuthenticator
 {
     private readonly List<(ApiKeyEntry Entry, byte[] HashBytes)> _keys;
+    private static readonly byte[] DummyHash = new byte[32]; // SHA-256 produces 32 bytes
 
     public ApiKeyAuthenticator(IEnumerable<ApiKeyEntry> keys)
     {
@@ -14,12 +15,15 @@ public sealed class ApiKeyAuthenticator
             try
             {
                 var hashBytes = Convert.FromHexString(entry.KeyHash);
+                // Validate expected length (SHA-256 = 32 bytes)
+                if (hashBytes.Length != 32)
+                    return (entry, DummyHash);
                 return (entry, hashBytes);
             }
             catch (FormatException)
             {
-                // Skip malformed hash entries
-                return (entry, Array.Empty<byte>());
+                // Use dummy hash for malformed entries to maintain constant time
+                return (entry, DummyHash);
             }
         }).ToList();
     }
@@ -34,16 +38,8 @@ public sealed class ApiKeyAuthenticator
 
         foreach (var (entry, entryHashBytes) in _keys)
         {
-            // Always perform comparison, even for invalid entries, to maintain constant time
-            bool isValidEntry = entryHashBytes.Length > 0;
-            bool lengthMatches = hashBytes.Length == entryHashBytes.Length;
-            
-            // Only call FixedTimeEquals if lengths match to avoid exception
-            bool hashMatches = false;
-            if (lengthMatches && isValidEntry)
-            {
-                hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
-            }
+            // Always call FixedTimeEquals to maintain constant time, even for invalid entries
+            bool hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
 
             // Use conditional logic instead of early returns to maintain constant time
             if (hashMatches && !foundMatch)
