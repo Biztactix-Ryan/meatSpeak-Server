@@ -12,6 +12,7 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Repositories;
+using MeatSpeak.Server.Diagnostics;
 using MeatSpeak.Server.Events;
 using MeatSpeak.Server.Numerics;
 using MeatSpeak.Server.Permissions;
@@ -34,6 +35,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+
+// Parse --benchmark args
+var benchmarkMode = args.Contains("--benchmark");
+string? benchmarkOutputPath = null;
+var outputIdx = Array.IndexOf(args, "--benchmark-output");
+if (outputIdx >= 0 && outputIdx + 1 < args.Length)
+    benchmarkOutputPath = args[outputIdx + 1];
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -155,7 +163,25 @@ builder.Services.AddSingleton<IServer>(sp => new ServerState(
     sp.GetRequiredService<CommandRegistry>(),
     sp.GetRequiredService<ModeRegistry>(),
     sp.GetRequiredService<CapabilityRegistry>(),
-    sp.GetRequiredService<IEventBus>()));
+    sp.GetRequiredService<IEventBus>(),
+    sp.GetRequiredService<ServerMetrics>()));
+
+// Diagnostics
+builder.Services.AddSingleton<ServerMetrics>();
+
+// Benchmark mode — auto-shutdown when all clients disconnect
+if (benchmarkMode)
+{
+    builder.Services.AddHostedService(sp => new BenchmarkService(
+        sp.GetRequiredService<ServerMetrics>(),
+        sp.GetRequiredService<IHostApplicationLifetime>(),
+        sp.GetRequiredService<ILogger<BenchmarkService>>(),
+        benchmarkOutputPath));
+}
+
+// Background DB write queue
+builder.Services.AddSingleton<MeatSpeak.Server.Data.DbWriteQueue>();
+builder.Services.AddHostedService<MeatSpeak.Server.Data.DbWriteService>();
 
 // Infrastructure
 builder.Services.AddSingleton<NumericSender>(sp => new NumericSender(sp.GetRequiredService<IServer>()));
@@ -186,6 +212,7 @@ if (apiKeyEntries.Count == 0)
 builder.Services.AddSingleton(new ApiKeyAuthenticator(apiKeyEntries));
 
 // Admin API — method registrations (non-DB methods are plain singletons)
+builder.Services.AddSingleton<IAdminMethod, MetricsSnapshotMethod>();
 builder.Services.AddSingleton<IAdminMethod, ServerStatsMethod>();
 builder.Services.AddSingleton<IAdminMethod, ServerRehashMethod>();
 builder.Services.AddSingleton<IAdminMethod, ServerMotdGetMethod>();
@@ -322,6 +349,16 @@ using (var scope = app.Services.CreateScope())
 {
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
+
+    // Enable WAL mode for SQLite
+    if (dbConfig.Provider.Equals("sqlite", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(dbConfig.Provider))
+    {
+        var db = scope.ServiceProvider.GetRequiredService<MeatSpeakDbContext>();
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
+        await db.Database.ExecuteSqlRawAsync("PRAGMA synchronous=NORMAL;");
+        app.Logger.LogInformation("SQLite WAL mode enabled");
+    }
+
     app.Logger.LogInformation("Database initialized ({Provider})",
         dbConfig.Provider.ToLowerInvariant() == "sqlite"
             ? $"SQLite: {dbConnectionString ?? "meatspeak.db"}"
@@ -352,6 +389,8 @@ using (var scope = app.Services.CreateScope())
 var registration = app.Services.GetRequiredService<RegistrationPipeline>();
 var numerics = app.Services.GetRequiredService<NumericSender>();
 var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
+var metrics = app.Services.GetRequiredService<ServerMetrics>();
+var writeQueue = app.Services.GetRequiredService<MeatSpeak.Server.Data.DbWriteQueue>();
 
 // Connection handlers
 server.Commands.Register(new PingHandler());
@@ -359,18 +398,18 @@ server.Commands.Register(new PongHandler());
 server.Commands.Register(new PassHandler(server));
 server.Commands.Register(new NickHandler(server, registration));
 server.Commands.Register(new UserHandler(server, registration));
-server.Commands.Register(new QuitHandler(scopeFactory));
+server.Commands.Register(new QuitHandler(writeQueue));
 server.Commands.Register(new CapHandler(server, registration));
 
 // Messaging handlers
-server.Commands.Register(new PrivmsgHandler(server, scopeFactory));
-server.Commands.Register(new NoticeHandler(server, scopeFactory));
+server.Commands.Register(new PrivmsgHandler(server, writeQueue, metrics));
+server.Commands.Register(new NoticeHandler(server, writeQueue, metrics));
 
 // Channel handlers
-server.Commands.Register(new JoinHandler(server, scopeFactory));
-server.Commands.Register(new PartHandler(server, scopeFactory));
+server.Commands.Register(new JoinHandler(server, writeQueue, metrics));
+server.Commands.Register(new PartHandler(server, writeQueue));
 server.Commands.Register(new ModeHandler(server));
-server.Commands.Register(new TopicHandler(server, scopeFactory));
+server.Commands.Register(new TopicHandler(server, writeQueue));
 server.Commands.Register(new KickHandler(server));
 server.Commands.Register(new NamesHandler(server));
 server.Commands.Register(new ListHandler(server));

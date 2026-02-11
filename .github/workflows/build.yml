@@ -31,9 +31,12 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release
 
-      - name: Start server
+      - name: Start server (benchmark mode)
         run: |
-          dotnet run --project src/MeatSpeak.Server --configuration Release &
+          dotnet run --project src/MeatSpeak.Server --configuration Release -- \
+            --benchmark --benchmark-output server-metrics.json &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
           timeout 30 bash -c 'until nc -z localhost 6667; do sleep 0.5; done'
 
       - name: Run smoke benchmark
@@ -43,16 +46,22 @@ jobs:
           --delay 10 --quiet --seed 1 --max-errors 0
           --output benchmark-results.json
 
-      - name: Stop server
+      - name: Wait for server auto-shutdown
+        run: |
+          timeout 60 tail --pid=$SERVER_PID -f /dev/null || true
+
+      - name: Stop server (fallback)
         if: always()
-        run: pkill -f 'MeatSpeak.Server' || true
+        run: kill $SERVER_PID 2>/dev/null || true
 
       - name: Upload benchmark results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
-          path: benchmark-results.json
+          path: |
+            benchmark-results.json
+            server-metrics.json
 
       - name: Publish linux-x64
         run: dotnet publish src/MeatSpeak.Server/MeatSpeak.Server.csproj --configuration Release --runtime linux-x64 --self-contained -o publish/linux-x64

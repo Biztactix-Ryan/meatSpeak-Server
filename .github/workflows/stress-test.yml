@@ -27,9 +27,12 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
-      - name: Start server
+      - name: Start server (benchmark mode)
         run: |
-          dotnet run --project src/MeatSpeak.Server --configuration Release &
+          dotnet run --project src/MeatSpeak.Server --configuration Release -- \
+            --benchmark --benchmark-output server-metrics.json &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
           timeout 30 bash -c 'until nc -z localhost 6667; do sleep 0.5; done'
 
       - name: Run stress test
@@ -39,13 +42,19 @@ jobs:
           --delay 10 --quiet --seed 42 --max-errors 0
           --output stress-test-results.json
 
-      - name: Stop server
+      - name: Wait for server auto-shutdown
+        run: |
+          timeout 120 tail --pid=$SERVER_PID -f /dev/null || true
+
+      - name: Stop server (fallback)
         if: always()
-        run: pkill -f 'MeatSpeak.Server' || true
+        run: kill $SERVER_PID 2>/dev/null || true
 
       - name: Upload stress test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: stress-test-results
-          path: stress-test-results.json
+          path: |
+            stress-test-results.json
+            server-metrics.json
