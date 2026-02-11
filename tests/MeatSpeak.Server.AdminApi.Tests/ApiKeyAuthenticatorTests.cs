@@ -66,4 +66,49 @@ public class ApiKeyAuthenticatorTests
         var auth = new ApiKeyAuthenticator(Array.Empty<ApiKeyEntry>());
         Assert.False(auth.Authenticate("any-key"));
     }
+
+    [Fact]
+    public void Authenticate_MultipleKeys_FirstMatchWins()
+    {
+        var hash1 = ApiKeyAuthenticator.HashKey("key1");
+        var hash2 = ApiKeyAuthenticator.HashKey("key2");
+        var hash3 = ApiKeyAuthenticator.HashKey("key3");
+        
+        var keys = new[]
+        {
+            new ApiKeyEntry { Name = "first", KeyHash = hash1 },
+            new ApiKeyEntry { Name = "second", KeyHash = hash2 },
+            new ApiKeyEntry { Name = "third", KeyHash = hash3 }
+        };
+        
+        var auth = new ApiKeyAuthenticator(keys);
+        Assert.True(auth.Authenticate("key2"));
+        Assert.False(auth.Authenticate("invalid-key"));
+    }
+
+    [Fact]
+    public void Authenticate_MultipleKeysWithSameHash_FirstMatchWins()
+    {
+        var hash = ApiKeyAuthenticator.HashKey("shared-key");
+        
+        var keys = new[]
+        {
+            new ApiKeyEntry
+            {
+                Name = "restricted",
+                KeyHash = hash,
+                AllowedMethods = new List<string> { "server.stats" }
+            },
+            new ApiKeyEntry
+            {
+                Name = "unrestricted",
+                KeyHash = hash
+            }
+        };
+        
+        var auth = new ApiKeyAuthenticator(keys);
+        // Should use first match, which has restrictions
+        Assert.True(auth.Authenticate("shared-key", "server.stats"));
+        Assert.False(auth.Authenticate("shared-key", "server.shutdown"));
+    }
 }

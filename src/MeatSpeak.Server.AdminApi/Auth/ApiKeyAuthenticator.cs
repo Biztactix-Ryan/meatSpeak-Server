@@ -15,18 +15,27 @@ public sealed class ApiKeyAuthenticator
     public bool Authenticate(string apiKey, string? method = null)
     {
         var hash = HashKey(apiKey);
+        var hashBytes = Convert.FromHexString(hash);
+
+        bool foundMatch = false;
+        bool result = false;
 
         foreach (var entry in _keys)
         {
-            if (string.Equals(entry.KeyHash, hash, StringComparison.OrdinalIgnoreCase))
+            var entryHashBytes = Convert.FromHexString(entry.KeyHash);
+            bool hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
+
+            if (hashMatches && !foundMatch)
             {
+                foundMatch = true;
                 if (method != null && entry.AllowedMethods != null && entry.AllowedMethods.Count > 0)
-                    return entry.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase);
-                return true;
+                    result = entry.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase);
+                else
+                    result = true;
             }
         }
 
-        return false;
+        return result;
     }
 
     public static string HashKey(string apiKey)
