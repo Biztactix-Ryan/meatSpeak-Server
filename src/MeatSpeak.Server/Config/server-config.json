@@ -12,9 +12,28 @@
   "TcpPort": 6667,
   "UdpBindAddress": "0.0.0.0",
   "UdpPort": 6668,
+  "WebSocketEnabled": true,
+  "WebSocketPort": 6669,
+  "WebSocketPath": "/irc",
   "AdminPort": 6670,
   "MaxConnections": 1024,
   "PingInterval": 60,
   "PingTimeout": 180,
-  "Version": "meatspeak-0.1.0"
+  "Version": "meatspeak-0.1.0",
+  "Tls": {
+    "Enabled": false,
+    "IrcTlsPort": 6697,
+    "WebSocketTlsPort": 443,
+    "AcmeEnabled": false,
+    "AcmeDomains": [],
+    "AcmeEmail": null,
+    "AcmeStaging": false,
+    "AcmeChallengeType": "Http01",
+    "AcmeHttpPort": 80,
+    "CloudflareApiToken": null,
+    "CloudflareZoneId": null,
+    "CertPath": null,
+    "CertKeyPath": null,
+    "CertPassword": null
+  }
 }

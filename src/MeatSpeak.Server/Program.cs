@@ -9,6 +9,8 @@ using MeatSpeak.Server.Events;
 using MeatSpeak.Server.Numerics;
 using MeatSpeak.Server.Registration;
 using MeatSpeak.Server.State;
+using MeatSpeak.Server.Tls;
+using MeatSpeak.Server.Transport.Tls;
 using MeatSpeak.Server.Handlers.Connection;
 using MeatSpeak.Server.Handlers.Messaging;
 using MeatSpeak.Server.Handlers.Channels;
@@ -16,11 +18,13 @@ using MeatSpeak.Server.Handlers.ServerInfo;
 using MeatSpeak.Server.Handlers.Operator;
 using MeatSpeak.Server.Handlers.Voice;
 using MeatSpeak.Server.Handlers.Auth;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.AddConsole();
 builder.Logging.SetMinimumLevel(LogLevel.Information);
@@ -28,6 +32,61 @@ builder.Logging.SetMinimumLevel(LogLevel.Information);
 // Load config
 var configPath = Path.Combine(AppContext.BaseDirectory, "Config", "server-config.json");
 var config = ServerConfigLoader.Load(configPath);
+
+// Configure Kestrel endpoints
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    if (config.Tls.Enabled)
+    {
+        // WSS on TLS port
+        kestrel.ListenAnyIP(config.Tls.WebSocketTlsPort, listenOptions =>
+        {
+            if (!string.IsNullOrEmpty(config.Tls.CertPath))
+            {
+                // Manual cert
+                if (!string.IsNullOrEmpty(config.Tls.CertKeyPath))
+                {
+                    var cert = System.Security.Cryptography.X509Certificates.X509Certificate2
+                        .CreateFromPemFile(config.Tls.CertPath, config.Tls.CertKeyPath);
+                    var exported = cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx);
+                    cert.Dispose();
+                    cert = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12(exported, null);
+                    listenOptions.UseHttps(cert);
+                }
+                else
+                {
+                    listenOptions.UseHttps(config.Tls.CertPath, config.Tls.CertPassword);
+                }
+            }
+            else if (config.Tls.AcmeEnabled)
+            {
+                // ACME — cert will be provided by AcmeCertificateProvider via selector
+                listenOptions.UseHttps(httpsOptions =>
+                {
+                    httpsOptions.ServerCertificateSelector = (connectionContext, name) =>
+                    {
+                        var provider = connectionContext?.Features
+                            .Get<Microsoft.AspNetCore.Connections.Features.IConnectionItemsFeature>()
+                            ?.Items["__certProvider"] as ICertificateProvider;
+                        // Fallback: resolve from app services (set after build)
+                        return AcmeCertProviderInstance?.GetCertificate();
+                    };
+                });
+            }
+        });
+
+        // ACME HTTP-01 challenge port
+        if (config.Tls.AcmeEnabled && config.Tls.AcmeChallengeType == "Http01")
+        {
+            kestrel.ListenAnyIP(config.Tls.AcmeHttpPort);
+        }
+    }
+    else if (config.WebSocketEnabled)
+    {
+        // Plain WebSocket only when TLS is disabled
+        kestrel.ListenAnyIP(config.WebSocketPort);
+    }
+});
 
 // Core registries
 builder.Services.AddSingleton(config);
@@ -58,15 +117,51 @@ builder.Services.AddSingleton<NumericSender>(sp => new NumericSender(sp.GetRequi
 builder.Services.AddSingleton<RegistrationPipeline>();
 builder.Services.AddSingleton<IrcConnectionHandler>();
 
-// Hosted service
+// TLS / ACME registration
+if (config.Tls.Enabled)
+{
+    if (!string.IsNullOrEmpty(config.Tls.CertPath))
+    {
+        // Manual certificate
+        builder.Services.AddSingleton<ICertificateProvider>(
+            new FileCertificateProvider(config.Tls.CertPath, config.Tls.CertKeyPath, config.Tls.CertPassword));
+    }
+    else if (config.Tls.AcmeEnabled)
+    {
+        // ACME certificate
+        var acmeCertProvider = new AcmeCertificateProvider();
+        AcmeCertProviderInstance = acmeCertProvider;
+        builder.Services.AddSingleton<AcmeCertificateProvider>(acmeCertProvider);
+        builder.Services.AddSingleton<ICertificateProvider>(acmeCertProvider);
+
+        if (config.Tls.AcmeChallengeType == "Dns01")
+        {
+            builder.Services.AddSingleton<IAcmeChallengeHandler>(sp =>
+                new CloudflareDns01ChallengeHandler(
+                    config.Tls.CloudflareApiToken!,
+                    config.Tls.CloudflareZoneId!,
+                    sp.GetRequiredService<ILogger<CloudflareDns01ChallengeHandler>>()));
+        }
+        else
+        {
+            builder.Services.AddSingleton<Http01ChallengeHandler>();
+            builder.Services.AddSingleton<IAcmeChallengeHandler>(sp =>
+                sp.GetRequiredService<Http01ChallengeHandler>());
+        }
+
+        builder.Services.AddHostedService<AcmeService>();
+    }
+}
+
+// Hosted service for TCP
 builder.Services.AddHostedService<ServerHost>();
 
-var host = builder.Build();
+var app = builder.Build();
 
 // Register command handlers after build
-var server = host.Services.GetRequiredService<IServer>();
-var registration = host.Services.GetRequiredService<RegistrationPipeline>();
-var numerics = host.Services.GetRequiredService<NumericSender>();
+var server = app.Services.GetRequiredService<IServer>();
+var registration = app.Services.GetRequiredService<RegistrationPipeline>();
+var numerics = app.Services.GetRequiredService<NumericSender>();
 
 // Connection handlers
 server.Commands.Register(new PingHandler());
@@ -109,4 +204,38 @@ server.Commands.Register(new VoiceHandler());
 // Auth handler (stub)
 server.Commands.Register(new AuthenticateHandler());
 
-await host.RunAsync();
+// Wire up WebSocket middleware
+if (config.WebSocketEnabled || config.Tls.Enabled)
+{
+    app.UseWebSockets();
+
+    // ACME HTTP-01 challenge middleware (must be before WebSocket middleware)
+    if (config.Tls is { Enabled: true, AcmeEnabled: true, AcmeChallengeType: "Http01" })
+    {
+        var challengeHandler = app.Services.GetRequiredService<Http01ChallengeHandler>();
+        app.UseMiddleware<AcmeChallengeMiddleware>(challengeHandler);
+    }
+
+    var ircHandler = app.Services.GetRequiredService<IrcConnectionHandler>();
+    var wsLogger = app.Services.GetRequiredService<ILogger<WebSocketMiddleware>>();
+    app.UseMiddleware<WebSocketMiddleware>(ircHandler, wsLogger, config.WebSocketPath);
+
+    if (config.Tls.Enabled)
+    {
+        app.Logger.LogInformation("WebSocket transport (WSS) enabled on port {Port} at path {Path}",
+            config.Tls.WebSocketTlsPort, config.WebSocketPath);
+    }
+    else
+    {
+        app.Logger.LogInformation("WebSocket transport enabled on port {Port} at path {Path}",
+            config.WebSocketPort, config.WebSocketPath);
+    }
+}
+
+await app.RunAsync();
+
+// Static field for ACME cert provider access during Kestrel configuration
+partial class Program
+{
+    internal static AcmeCertificateProvider? AcmeCertProviderInstance;
+}

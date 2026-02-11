@@ -6,7 +6,7 @@ using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.State;
-using MeatSpeak.Server.Transport.Tcp;
+using MeatSpeak.Server.Transport;
 using Microsoft.Extensions.Logging;
 using IrcNumerics = MeatSpeak.Protocol.Numerics;
 
@@ -23,7 +23,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         _logger = logger;
     }
 
-    public void OnConnected(TcpConnection connection)
+    public void OnConnected(IConnection connection)
     {
         var session = new SessionImpl(connection, _server.Config.ServerName);
         lock (_sessionsLock)
@@ -33,7 +33,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         _logger.LogInformation("Client connected: {Id} from {Remote}", session.Id, connection.RemoteEndPoint);
     }
 
-    public void OnData(TcpConnection connection, ReadOnlySpan<byte> line)
+    public void OnData(IConnection connection, ReadOnlySpan<byte> line)
     {
         SessionImpl? session;
         lock (_sessionsLock)
@@ -84,7 +84,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         var message = parts.ToMessage();
         session.Info.LastActivity = DateTimeOffset.UtcNow;
 
-        // Fire and forget the handler (we're on the SAEA callback thread)
+        // Fire and forget the handler (we're on the transport callback thread)
         _ = Task.Run(async () =>
         {
             try
@@ -98,7 +98,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         });
     }
 
-    public void OnDisconnected(TcpConnection connection)
+    public void OnDisconnected(IConnection connection)
     {
         SessionImpl? session;
         lock (_sessionsLock)

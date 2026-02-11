@@ -1,5 +1,27 @@
 namespace MeatSpeak.Server.Core.Server;
 
+public sealed class TlsConfig
+{
+    public bool Enabled { get; set; }
+    public int IrcTlsPort { get; set; } = 6697;
+    public int WebSocketTlsPort { get; set; } = 443;
+
+    // ACME settings
+    public bool AcmeEnabled { get; set; }
+    public List<string> AcmeDomains { get; set; } = new();
+    public string? AcmeEmail { get; set; }
+    public bool AcmeStaging { get; set; }
+    public string AcmeChallengeType { get; set; } = "Http01";
+    public int AcmeHttpPort { get; set; } = 80;
+    public string? CloudflareApiToken { get; set; }
+    public string? CloudflareZoneId { get; set; }
+
+    // Manual cert settings
+    public string? CertPath { get; set; }
+    public string? CertKeyPath { get; set; }
+    public string? CertPassword { get; set; }
+}
+
 public sealed class ServerConfig
 {
     public string ServerName { get; set; } = "meatspeak.local";
@@ -16,6 +38,10 @@ public sealed class ServerConfig
     public int PingInterval { get; set; } = 60;
     public int PingTimeout { get; set; } = 180;
     public string Version { get; set; } = "meatspeak-0.1.0";
+    public bool WebSocketEnabled { get; set; } = true;
+    public int WebSocketPort { get; set; } = 6669;
+    public string WebSocketPath { get; set; } = "/irc";
     public string? OperName { get; set; }
     public string? OperPassword { get; set; }
+    public TlsConfig Tls { get; set; } = new();
 }

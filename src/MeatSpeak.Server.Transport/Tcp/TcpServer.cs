@@ -2,6 +2,7 @@ namespace MeatSpeak.Server.Transport.Tcp;
 
 using System.Net;
 using System.Net.Sockets;
+using MeatSpeak.Server.Transport;
 using MeatSpeak.Server.Transport.Pools;
 using Microsoft.Extensions.Logging;
 

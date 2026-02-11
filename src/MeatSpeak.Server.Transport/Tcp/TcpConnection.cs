@@ -2,10 +2,11 @@ namespace MeatSpeak.Server.Transport.Tcp;
 
 using System.Net;
 using System.Net.Sockets;
+using MeatSpeak.Server.Transport;
 using MeatSpeak.Server.Transport.Pools;
 using Microsoft.Extensions.Logging;
 
-public sealed class TcpConnection : IDisposable
+public sealed class TcpConnection : IConnection, IDisposable
 {
     private readonly Socket _socket;
     private readonly SocketAsyncEventArgs _recvArgs;

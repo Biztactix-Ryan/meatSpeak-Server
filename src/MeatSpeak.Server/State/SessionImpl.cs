@@ -4,20 +4,20 @@ using System.Text;
 using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Permissions;
-using MeatSpeak.Server.Transport.Tcp;
+using MeatSpeak.Server.Transport;
 
 public sealed class SessionImpl : ISession
 {
-    private readonly TcpConnection _connection;
+    private readonly IConnection _connection;
     private readonly string _serverName;
 
     public string Id => _connection.Id;
     public SessionState State { get; set; } = SessionState.Connecting;
     public SessionInfo Info { get; } = new();
     public ServerPermission CachedServerPermissions { get; set; }
-    public TcpConnection Connection => _connection;
+    public IConnection Connection => _connection;
 
-    public SessionImpl(TcpConnection connection, string serverName)
+    public SessionImpl(IConnection connection, string serverName)
     {
         _connection = connection;
         _serverName = serverName;
