@@ -31,9 +31,9 @@ public ref struct VoicePacket
         if (packet.Version != CurrentVersion)
             return false;
 
-        // Validate VoicePacketType enum
+        // Validate VoicePacketType enum - use range check for performance
         var typeValue = data[1];
-        if (!System.Enum.IsDefined(typeof(VoicePacketType), typeValue))
+        if (typeValue < 1 || typeValue > 3)
             return false;
 
         // Validate VoicePacketFlags - check that only defined flag bits are set

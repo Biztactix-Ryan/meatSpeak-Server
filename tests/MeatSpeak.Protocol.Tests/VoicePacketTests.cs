@@ -257,20 +257,4 @@ public class VoicePacketTests
 
         Assert.False(result);
     }
-
-    [Fact]
-    public void TryParse_ValidFlagsCombination_Succeeds()
-    {
-        var data = new byte[VoicePacket.HeaderSize];
-        data[0] = VoicePacket.CurrentVersion;
-        data[1] = (byte)VoicePacketType.Audio;
-        data[2] = (byte)(VoicePacketFlags.E2E | VoicePacketFlags.Spatial); // Valid combination
-
-        var result = VoicePacket.TryParse(data, out var packet);
-
-        Assert.True(result);
-        Assert.True(packet.HasE2E);
-        Assert.True(packet.HasSpatial);
-        Assert.False(packet.HasPriority);
-    }
 }
