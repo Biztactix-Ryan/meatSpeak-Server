@@ -97,6 +97,9 @@ builder.WebHost.ConfigureKestrel(kestrel =>
         // Plain WebSocket only when TLS is disabled
         kestrel.ListenAnyIP(config.WebSocketPort);
     }
+
+    // Always listen on AdminPort for HTTP (admin API, static files)
+    kestrel.ListenAnyIP(config.AdminPort);
 });
 
 // Core registries
@@ -360,47 +363,48 @@ server.Commands.Register(new VoiceHandler());
 server.Commands.Register(new AuthenticateHandler());
 
 // Wire up middleware
+
+// ACME HTTP-01 challenge middleware (must be before other middleware)
+if (config.Tls is { Enabled: true, AcmeEnabled: true, AcmeChallengeType: "Http01" })
+{
+    var challengeHandler = app.Services.GetRequiredService<Http01ChallengeHandler>();
+    app.UseMiddleware<AcmeChallengeMiddleware>(challengeHandler);
+}
+
+// IP allowlist (applies to /api and /admin only)
+app.UseMiddleware<IpAllowListMiddleware>();
+
+// Admin API endpoint at /api
+app.UseMiddleware<AdminApiMiddleware>();
+
+// Static files for admin frontend
+var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (Directory.Exists(wwwrootPath))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(wwwrootPath),
+        RequestPath = ""
+    });
+}
+
+// Redirect /admin to /admin/index.html
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/admin", StringComparison.OrdinalIgnoreCase) ||
+        context.Request.Path.Equals("/admin/", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Redirect("/admin/index.html");
+        return;
+    }
+    await next();
+});
+
+// WebSocket IRC transport
 if (config.WebSocketEnabled || config.Tls.Enabled)
 {
     app.UseWebSockets();
 
-    // ACME HTTP-01 challenge middleware (must be before other middleware)
-    if (config.Tls is { Enabled: true, AcmeEnabled: true, AcmeChallengeType: "Http01" })
-    {
-        var challengeHandler = app.Services.GetRequiredService<Http01ChallengeHandler>();
-        app.UseMiddleware<AcmeChallengeMiddleware>(challengeHandler);
-    }
-
-    // IP allowlist (applies to /api and /admin only)
-    app.UseMiddleware<IpAllowListMiddleware>();
-
-    // Admin API endpoint at /api
-    app.UseMiddleware<AdminApiMiddleware>();
-
-    // Static files for admin frontend
-    var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
-    if (Directory.Exists(wwwrootPath))
-    {
-        app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(wwwrootPath),
-            RequestPath = ""
-        });
-    }
-
-    // Redirect /admin to /admin/index.html
-    app.Use(async (context, next) =>
-    {
-        if (context.Request.Path.Equals("/admin", StringComparison.OrdinalIgnoreCase) ||
-            context.Request.Path.Equals("/admin/", StringComparison.OrdinalIgnoreCase))
-        {
-            context.Response.Redirect("/admin/index.html");
-            return;
-        }
-        await next();
-    });
-
-    // WebSocket IRC transport
     var ircHandler = app.Services.GetRequiredService<IrcConnectionHandler>();
     var wsLogger = app.Services.GetRequiredService<ILogger<WebSocketMiddleware>>();
     app.UseMiddleware<WebSocketMiddleware>(ircHandler, wsLogger, config.WebSocketPath);
@@ -415,9 +419,9 @@ if (config.WebSocketEnabled || config.Tls.Enabled)
         app.Logger.LogInformation("WebSocket transport enabled on port {Port} at path {Path}",
             config.WebSocketPort, config.WebSocketPath);
     }
-
-    app.Logger.LogInformation("Admin API available at /api, Admin UI at /admin");
 }
+
+app.Logger.LogInformation("Admin API available on port {Port} at /api, Admin UI at /admin", config.AdminPort);
 
 await app.RunAsync();
 
