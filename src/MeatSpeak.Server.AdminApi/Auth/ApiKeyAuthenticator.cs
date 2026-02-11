@@ -34,21 +34,32 @@ public sealed class ApiKeyAuthenticator
 
         foreach (var (entry, entryHashBytes) in _keys)
         {
-            // Skip entries with invalid hash format
-            if (entryHashBytes.Length == 0)
-                continue;
+            // Always perform comparison, even for invalid entries, to maintain constant time
+            bool isValidEntry = entryHashBytes.Length > 0;
+            bool lengthMatches = hashBytes.Length == entryHashBytes.Length;
+            
+            // Only call FixedTimeEquals if lengths match to avoid exception
+            bool hashMatches = false;
+            if (lengthMatches && isValidEntry)
+            {
+                hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
+            }
 
-            // FixedTimeEquals requires equal length arrays; use standard comparison to avoid exception
-            bool hashMatches = hashBytes.Length == entryHashBytes.Length 
-                && CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
-
+            // Use conditional logic instead of early returns to maintain constant time
             if (hashMatches && !foundMatch)
             {
                 foundMatch = true;
-                if (method != null && entry.AllowedMethods != null && entry.AllowedMethods.Count > 0)
-                    result = entry.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase);
+                
+                // Check method permissions
+                bool hasMethodRestriction = method != null && entry.AllowedMethods != null && entry.AllowedMethods.Count > 0;
+                if (hasMethodRestriction)
+                {
+                    result = entry.AllowedMethods!.Contains(method!, StringComparer.OrdinalIgnoreCase);
+                }
                 else
+                {
                     result = true;
+                }
             }
         }
 
