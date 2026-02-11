@@ -169,6 +169,20 @@ var apiKeyEntries = config.AdminApi.ApiKeys.Select(k => new ApiKeyEntry
     KeyHash = k.KeyHash,
     AllowedMethods = k.AllowedMethods,
 }).ToList();
+
+// Auto-generate an API key when none are configured
+string? generatedApiKey = null;
+if (apiKeyEntries.Count == 0)
+{
+    generatedApiKey = Convert.ToBase64String(
+        System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+    apiKeyEntries.Add(new ApiKeyEntry
+    {
+        Name = "auto-generated",
+        KeyHash = ApiKeyAuthenticator.GenerateHash(generatedApiKey),
+    });
+}
+
 builder.Services.AddSingleton(new ApiKeyAuthenticator(apiKeyEntries));
 
 // Admin API — method registrations (non-DB methods are plain singletons)
@@ -422,6 +436,14 @@ if (config.WebSocketEnabled || config.Tls.Enabled)
 }
 
 app.Logger.LogInformation("Admin API available on port {Port} at /api, Admin UI at /admin", config.AdminPort);
+
+if (generatedApiKey != null)
+{
+    app.Logger.LogWarning("No API keys configured — auto-generated key for this session:");
+    app.Logger.LogWarning("  API Key: {ApiKey}", generatedApiKey);
+    app.Logger.LogWarning("  Usage:   curl -H \"Authorization: Bearer {ApiKey}\" http://localhost:{Port}/api", generatedApiKey, config.AdminPort);
+    app.Logger.LogWarning("  To persist, add a hashed key to server-config.json AdminApi.ApiKeys");
+}
 
 await app.RunAsync();
 
