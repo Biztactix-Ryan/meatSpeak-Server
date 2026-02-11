@@ -2,6 +2,14 @@ namespace MeatSpeak.Protocol;
 
 using System.Text;
 
+/// <summary>
+/// Builds IRC protocol messages in the standard format.
+/// 
+/// IMPORTANT: Per RFC 1459, IRC messages must not exceed 512 bytes including CR/LF.
+/// This means message content must not exceed IrcConstants.MaxMessageLength (510 bytes).
+/// This class does NOT enforce length limits - callers are responsible for ensuring
+/// messages fit within the protocol limits before calling these methods.
+/// </summary>
 public static class MessageBuilder
 {
     public static int Write(Span<byte> buffer, string? prefix, string command, ReadOnlySpan<string> parameters)

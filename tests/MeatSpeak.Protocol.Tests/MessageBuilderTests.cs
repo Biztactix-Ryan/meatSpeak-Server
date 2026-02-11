@@ -138,4 +138,48 @@ public class MessageBuilderTests
         Assert.Equal("testnick", msg.Parameters[0]);
         Assert.Equal("Welcome to the network", msg.Parameters[1]);
     }
+
+    [Fact]
+    public void Constants_MaxMessageLength_IsCorrectForRFC1459()
+    {
+        // RFC 1459: Max line length is 512 bytes INCLUDING CR/LF
+        // Therefore max message content is 510 bytes (512 - 2)
+        Assert.Equal(512, IrcConstants.MaxLineLength);
+        Assert.Equal(510, IrcConstants.MaxMessageLength);
+        Assert.Equal(IrcConstants.MaxLineLength - 2, IrcConstants.MaxMessageLength);
+    }
+
+    [Fact]
+    public void Write_ShortMessage_IncludesCrLfInOutput()
+    {
+        // Verify that CR/LF are always added to messages
+        var buffer = new byte[512];
+        int written = MessageBuilder.Write(buffer, "prefix", "CMD", "param");
+
+        // Should end with CR/LF
+        Assert.Equal(IrcConstants.CR, buffer[written - 2]);
+        Assert.Equal(IrcConstants.LF, buffer[written - 1]);
+    }
+
+    [Fact]
+    public void Write_LongMessage_Documentation()
+    {
+        // This test documents that MessageBuilder does NOT enforce the 512-byte limit.
+        // Callers are responsible for ensuring messages do not exceed MaxMessageLength (510 bytes)
+        // before the CR/LF terminator.
+        // 
+        // Per RFC 1459: "IRC messages are always lines of characters terminated with a CR-LF
+        // (Carriage Return - Line Feed) pair, and these messages SHALL NOT exceed 512 characters
+        // in length, counting all characters including the trailing CR-LF."
+        
+        var buffer = new byte[1024];
+        var longMessage = new string('A', 500);
+        int written = MessageBuilder.Write(buffer, "short", "CMD", longMessage);
+
+        // This will exceed 512 bytes - documenting the current behavior
+        // Format is: :short CMD :AAAA...\r\n
+        // = 1 + 5 + 1 + 3 + 1 + 1 + 500 + 2 = 514 bytes
+        Assert.True(written > IrcConstants.MaxLineLength,
+            "Long messages currently exceed RFC limit - callers must truncate");
+    }
 }

@@ -2,8 +2,27 @@ namespace MeatSpeak.Protocol;
 
 public static class IrcConstants
 {
+    /// <summary>
+    /// Per RFC 1459, the maximum line length is 512 bytes INCLUDING CR/LF.
+    /// This means the actual message content can be at most 510 bytes.
+    /// </summary>
     public const int MaxLineLength = 512;
+    
+    /// <summary>
+    /// Maximum message content length (excluding CR/LF terminator).
+    /// Per RFC 1459: MaxLineLength (512) - CR (1) - LF (1) = 510 bytes.
+    /// </summary>
+    public const int MaxMessageLength = 510;
+    
+    /// <summary>
+    /// Maximum line length with IRCv3 message tags.
+    /// Tags can add up to 4096 bytes plus the base message limit.
+    /// </summary>
     public const int MaxLineLengthWithTags = 4096 + 512;
+    
+    /// <summary>
+    /// Maximum tags content length per IRCv3 specification.
+    /// </summary>
     public const int MaxTagsLength = 4096;
     public const byte CR = (byte)'\r';
     public const byte LF = (byte)'\n';
