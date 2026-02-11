@@ -23,5 +23,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Update="Config\server-config.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

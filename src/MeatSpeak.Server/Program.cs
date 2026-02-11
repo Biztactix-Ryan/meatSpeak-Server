@@ -1,12 +1,19 @@
 using MeatSpeak.Server;
+using MeatSpeak.Server.Admin;
+using MeatSpeak.Server.AdminApi;
+using MeatSpeak.Server.AdminApi.Auth;
+using MeatSpeak.Server.AdminApi.JsonRpc;
+using MeatSpeak.Server.AdminApi.Methods;
 using MeatSpeak.Server.Config;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Modes;
 using MeatSpeak.Server.Core.Capabilities;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Data.Repositories;
 using MeatSpeak.Server.Events;
 using MeatSpeak.Server.Numerics;
+using MeatSpeak.Server.Permissions;
 using MeatSpeak.Server.Registration;
 using MeatSpeak.Server.State;
 using MeatSpeak.Server.Tls;
@@ -20,7 +27,9 @@ using MeatSpeak.Server.Handlers.Voice;
 using MeatSpeak.Server.Handlers.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -117,6 +126,64 @@ builder.Services.AddSingleton<NumericSender>(sp => new NumericSender(sp.GetRequi
 builder.Services.AddSingleton<RegistrationPipeline>();
 builder.Services.AddSingleton<IrcConnectionHandler>();
 
+// Admin API — API key authenticator
+var apiKeyEntries = config.AdminApi.ApiKeys.Select(k => new ApiKeyEntry
+{
+    Name = k.Name,
+    KeyHash = k.KeyHash,
+    AllowedMethods = k.AllowedMethods,
+}).ToList();
+builder.Services.AddSingleton(new ApiKeyAuthenticator(apiKeyEntries));
+
+// Admin API — method registrations
+builder.Services.AddSingleton<IAdminMethod, ServerStatsMethod>();
+builder.Services.AddSingleton<IAdminMethod, ServerRehashMethod>();
+builder.Services.AddSingleton<IAdminMethod, ServerMotdGetMethod>();
+builder.Services.AddSingleton<IAdminMethod, ServerMotdSetMethod>();
+builder.Services.AddSingleton<IAdminMethod, ServerShutdownMethod>();
+builder.Services.AddSingleton<IAdminMethod, ServerOperSetMethod>();
+builder.Services.AddSingleton<IAdminMethod, UserListMethod>();
+builder.Services.AddSingleton<IAdminMethod, UserInfoMethod>();
+builder.Services.AddSingleton<IAdminMethod, UserKickMethod>();
+builder.Services.AddSingleton<IAdminMethod, UserMessageMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelListMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelInfoMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelTopicMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelModeMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelCreateMethod>();
+builder.Services.AddSingleton<IAdminMethod, ChannelDeleteMethod>();
+
+// Ban and Role methods require repository services — register only if available
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new BanListMethod(sp.GetRequiredService<IBanRepository>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new BanAddMethod(sp.GetRequiredService<IBanRepository>(), sp.GetService<IAuditLogRepository>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new BanRemoveMethod(sp.GetRequiredService<IBanRepository>(), sp.GetService<IAuditLogRepository>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new BanCheckMethod(sp.GetRequiredService<IBanRepository>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleListMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleGetMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleCreateMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleUpdateMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleDeleteMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleAssignMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleRevokeMethod(sp.GetRequiredService<IPermissionService>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new RoleMembersMethod(sp.GetRequiredService<IRoleRepository>()));
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new AuditQueryMethod(sp.GetRequiredService<IAuditLogRepository>()));
+
+// Admin API — JSON-RPC processor
+builder.Services.AddSingleton<JsonRpcProcessor>();
+
 // TLS / ACME registration
 if (config.Tls.Enabled)
 {
@@ -204,18 +271,48 @@ server.Commands.Register(new VoiceHandler());
 // Auth handler (stub)
 server.Commands.Register(new AuthenticateHandler());
 
-// Wire up WebSocket middleware
+// Wire up middleware
 if (config.WebSocketEnabled || config.Tls.Enabled)
 {
     app.UseWebSockets();
 
-    // ACME HTTP-01 challenge middleware (must be before WebSocket middleware)
+    // ACME HTTP-01 challenge middleware (must be before other middleware)
     if (config.Tls is { Enabled: true, AcmeEnabled: true, AcmeChallengeType: "Http01" })
     {
         var challengeHandler = app.Services.GetRequiredService<Http01ChallengeHandler>();
         app.UseMiddleware<AcmeChallengeMiddleware>(challengeHandler);
     }
 
+    // IP allowlist (applies to /api and /admin only)
+    app.UseMiddleware<IpAllowListMiddleware>();
+
+    // Admin API endpoint at /api
+    app.UseMiddleware<AdminApiMiddleware>();
+
+    // Static files for admin frontend
+    var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+    if (Directory.Exists(wwwrootPath))
+    {
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(wwwrootPath),
+            RequestPath = ""
+        });
+    }
+
+    // Redirect /admin to /admin/index.html
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.Equals("/admin", StringComparison.OrdinalIgnoreCase) ||
+            context.Request.Path.Equals("/admin/", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Redirect("/admin/index.html");
+            return;
+        }
+        await next();
+    });
+
+    // WebSocket IRC transport
     var ircHandler = app.Services.GetRequiredService<IrcConnectionHandler>();
     var wsLogger = app.Services.GetRequiredService<ILogger<WebSocketMiddleware>>();
     app.UseMiddleware<WebSocketMiddleware>(ircHandler, wsLogger, config.WebSocketPath);
@@ -230,6 +327,8 @@ if (config.WebSocketEnabled || config.Tls.Enabled)
         app.Logger.LogInformation("WebSocket transport enabled on port {Port} at path {Path}",
             config.WebSocketPort, config.WebSocketPath);
     }
+
+    app.Logger.LogInformation("Admin API available at /api, Admin UI at /admin");
 }
 
 await app.RunAsync();

@@ -2,6 +2,7 @@ using Xunit;
 using NSubstitute;
 using MeatSpeak.Protocol;
 using IrcNumerics = MeatSpeak.Protocol.Numerics;
+using MeatSpeak.Server.AdminApi.Auth;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
@@ -21,7 +22,7 @@ public class OperHandlerTests
         {
             ServerName = "test.server",
             OperName = "admin",
-            OperPassword = "secret"
+            OperPassword = PasswordHasher.HashPassword("secret")
         });
         _server.Events.Returns(Substitute.For<IEventBus>());
         _handler = new OperHandler(_server);

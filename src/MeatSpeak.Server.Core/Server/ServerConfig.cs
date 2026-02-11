@@ -22,6 +22,19 @@ public sealed class TlsConfig
     public string? CertPassword { get; set; }
 }
 
+public sealed class AdminApiConfig
+{
+    public List<AdminApiKeyEntry> ApiKeys { get; set; } = new();
+    public List<string> IpAllowList { get; set; } = new();
+}
+
+public sealed class AdminApiKeyEntry
+{
+    public string Name { get; set; } = string.Empty;
+    public string KeyHash { get; set; } = string.Empty;
+    public List<string>? AllowedMethods { get; set; }
+}
+
 public sealed class ServerConfig
 {
     public string ServerName { get; set; } = "meatspeak.local";
@@ -44,4 +57,5 @@ public sealed class ServerConfig
     public string? OperName { get; set; }
     public string? OperPassword { get; set; }
     public TlsConfig Tls { get; set; } = new();
+    public AdminApiConfig AdminApi { get; set; } = new();
 }

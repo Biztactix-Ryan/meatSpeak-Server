@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeatSpeak Admin</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --bg2: #16213e;
+  --bg3: #0f3460;
+  --accent: #e94560;
+  --text: #eee;
+  --text2: #aaa;
+  --border: #333;
+  --success: #4caf50;
+  --warn: #ff9800;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+a { color: var(--accent); }
+
+/* Login overlay */
+#login-overlay {
+  position: fixed; inset: 0; background: var(--bg); display: flex;
+  align-items: center; justify-content: center; z-index: 1000;
+}
+#login-overlay.hidden { display: none; }
+#login-box { background: var(--bg2); padding: 2rem; border-radius: 8px; width: 360px; text-align: center; }
+#login-box h2 { margin-bottom: 1rem; }
+#login-box input { width: 100%; padding: .6rem; margin: .5rem 0; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 1rem; }
+#login-box button { width: 100%; padding: .6rem; margin-top: .5rem; border: none; border-radius: 4px; background: var(--accent); color: #fff; font-size: 1rem; cursor: pointer; }
+#login-box button:hover { opacity: .9; }
+#login-error { color: var(--accent); margin-top: .5rem; font-size: .85rem; }
+
+/* Layout */
+header { background: var(--bg2); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+header h1 { font-size: 1.3rem; }
+header .info { font-size: .85rem; color: var(--text2); }
+header button { background: none; border: 1px solid var(--border); color: var(--text2); padding: .3rem .8rem; border-radius: 4px; cursor: pointer; }
+header button:hover { color: var(--text); border-color: var(--text2); }
+
+nav { background: var(--bg2); display: flex; gap: 0; border-bottom: 2px solid var(--border); padding: 0 2rem; }
+nav button { background: none; border: none; color: var(--text2); padding: .8rem 1.2rem; cursor: pointer; font-size: .95rem; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+nav button:hover { color: var(--text); }
+
+main { padding: 1.5rem 2rem; max-width: 1200px; }
+.tab { display: none; }
+.tab.active { display: block; }
+
+/* Cards & tables */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.stat-card { background: var(--bg2); padding: 1.2rem; border-radius: 8px; text-align: center; }
+.stat-card .value { font-size: 2rem; font-weight: bold; color: var(--accent); }
+.stat-card .label { font-size: .85rem; color: var(--text2); margin-top: .3rem; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--border); }
+th { color: var(--text2); font-weight: 600; font-size: .85rem; text-transform: uppercase; }
+tr:hover { background: rgba(255,255,255,.03); }
+
+.btn { padding: .3rem .7rem; border: none; border-radius: 4px; cursor: pointer; font-size: .8rem; }
+.btn-danger { background: var(--accent); color: #fff; }
+.btn-primary { background: var(--bg3); color: var(--text); }
+.btn-success { background: var(--success); color: #fff; }
+.btn:hover { opacity: .85; }
+
+/* Forms */
+.form-row { display: flex; gap: .5rem; margin: 1rem 0; align-items: center; flex-wrap: wrap; }
+.form-row input, .form-row select { padding: .5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
+.form-row input { min-width: 180px; }
+.form-row label { font-size: .85rem; color: var(--text2); }
+
+textarea { width: 100%; min-height: 100px; padding: .5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-family: monospace; resize: vertical; }
+
+.section { margin-bottom: 2rem; }
+.section h3 { margin-bottom: .5rem; color: var(--text2); font-size: .95rem; text-transform: uppercase; }
+
+.toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: .8rem 1.2rem; border-radius: 6px; color: #fff; font-size: .9rem; z-index: 2000; animation: fadeIn .3s; }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--accent); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Modal */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 999; }
+.modal-bg.hidden { display: none; }
+.modal { background: var(--bg2); padding: 1.5rem; border-radius: 8px; min-width: 380px; max-width: 90vw; }
+.modal h3 { margin-bottom: 1rem; }
+.modal .actions { margin-top: 1rem; display: flex; gap: .5rem; justify-content: flex-end; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-overlay">
+  <div id="login-box">
+    <h2>MeatSpeak Admin</h2>
+    <input type="password" id="api-key-input" placeholder="Enter API Key" autofocus>
+    <button onclick="doLogin()">Connect</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>MeatSpeak Admin</h1>
+  <div class="info" id="header-info"></div>
+  <button onclick="doLogout()">Logout</button>
+</header>
+
+<!-- Navigation -->
+<nav>
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="users">Users</button>
+  <button data-tab="channels">Channels</button>
+  <button data-tab="bans">Bans</button>
+  <button data-tab="roles">Roles</button>
+  <button data-tab="server">Server</button>
+</nav>
+
+<main>
+  <!-- Dashboard -->
+  <div class="tab active" id="tab-dashboard">
+    <div class="stats-grid" id="stats-grid"></div>
+  </div>
+
+  <!-- Users -->
+  <div class="tab" id="tab-users">
+    <table>
+      <thead><tr><th>Nick</th><th>Account</th><th>State</th><th>Actions</th></tr></thead>
+      <tbody id="users-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Channels -->
+  <div class="tab" id="tab-channels">
+    <div class="form-row">
+      <input id="new-chan-name" placeholder="#channel-name">
+      <button class="btn btn-primary" onclick="createChannel()">Create Channel</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Members</th><th>Topic</th><th>Actions</th></tr></thead>
+      <tbody id="channels-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Bans -->
+  <div class="tab" id="tab-bans">
+    <div class="form-row">
+      <input id="ban-mask" placeholder="*!*@bad.host">
+      <input id="ban-reason" placeholder="Reason (optional)">
+      <input id="ban-duration" type="number" placeholder="Duration (seconds, 0=perm)" style="width:160px">
+      <button class="btn btn-danger" onclick="addBan()">Add Ban</button>
+    </div>
+    <table>
+      <thead><tr><th>Mask</th><th>Reason</th><th>Set By</th><th>Set At</th><th>Expires</th><th>Actions</th></tr></thead>
+      <tbody id="bans-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Roles -->
+  <div class="tab" id="tab-roles">
+    <div class="form-row">
+      <input id="role-name" placeholder="Role name">
+      <input id="role-position" type="number" placeholder="Position" style="width:90px">
+      <button class="btn btn-primary" onclick="createRole()">Create Role</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Position</th><th>Server Perms</th><th>Channel Perms</th><th>Actions</th></tr></thead>
+      <tbody id="roles-tbody"></tbody>
+    </table>
+    <div class="section" style="margin-top:2rem">
+      <h3>Assign / Revoke Role</h3>
+      <div class="form-row">
+        <input id="assign-account" placeholder="Account name">
+        <input id="assign-role-id" placeholder="Role ID (GUID)">
+        <button class="btn btn-success" onclick="assignRole()">Assign</button>
+        <button class="btn btn-danger" onclick="revokeRole()">Revoke</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Server -->
+  <div class="tab" id="tab-server">
+    <div class="section">
+      <h3>Message of the Day</h3>
+      <textarea id="motd-text"></textarea>
+      <div class="form-row"><button class="btn btn-primary" onclick="saveMotd()">Save MOTD</button></div>
+    </div>
+    <div class="section">
+      <h3>Set Oper Credentials</h3>
+      <div class="form-row">
+        <input id="oper-name" placeholder="Oper name">
+        <input id="oper-password" type="password" placeholder="Oper password">
+        <button class="btn btn-primary" onclick="setOper()">Set Oper</button>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Server Actions</h3>
+      <div class="form-row">
+        <button class="btn btn-primary" onclick="rehash()">Rehash Config</button>
+        <button class="btn btn-danger" onclick="if(confirm('Shut down server?'))shutdown()">Shutdown Server</button>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Audit Log</h3>
+      <table>
+        <thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Details</th></tr></thead>
+        <tbody id="audit-tbody"></tbody>
+      </table>
+      <div class="form-row"><button class="btn btn-primary" onclick="loadAudit()">Refresh</button></div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal -->
+<div class="modal-bg hidden" id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+const API = '/api';
+let apiKey = sessionStorage.getItem('meatspeak_api_key') || '';
+
+// JSON-RPC helper
+async function jsonRpc(method, params) {
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', method, params, id: Date.now() })
+  });
+  if (res.status === 401 || res.status === 403) {
+    toast('Authentication failed', 'error');
+    doLogout();
+    throw new Error('Unauthorized');
+  }
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'RPC error');
+  return data.result;
+}
+
+// Toast
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// Login
+async function doLogin() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) return;
+  apiKey = key;
+  try {
+    await jsonRpc('server.stats', {});
+    sessionStorage.setItem('meatspeak_api_key', key);
+    document.getElementById('login-overlay').classList.add('hidden');
+    loadDashboard();
+  } catch (e) {
+    document.getElementById('login-error').textContent = 'Invalid API key';
+    apiKey = '';
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('meatspeak_api_key');
+  apiKey = '';
+  document.getElementById('login-overlay').classList.remove('hidden');
+  document.getElementById('api-key-input').value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+// Auto-login if key in session
+if (apiKey) {
+  jsonRpc('server.stats', {}).then(() => {
+    document.getElementById('login-overlay').classList.add('hidden');
+    loadDashboard();
+  }).catch(() => { apiKey = ''; sessionStorage.removeItem('meatspeak_api_key'); });
+}
+
+document.getElementById('api-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// Tabs
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = document.getElementById('tab-' + btn.dataset.tab);
+    tab.classList.add('active');
+    // Load data for tab
+    const loaders = { dashboard: loadDashboard, users: loadUsers, channels: loadChannels, bans: loadBans, roles: loadRoles, server: loadServer };
+    if (loaders[btn.dataset.tab]) loaders[btn.dataset.tab]();
+  });
+});
+
+// Dashboard
+async function loadDashboard() {
+  try {
+    const s = await jsonRpc('server.stats', {});
+    const uptime = formatUptime(s.uptime);
+    document.getElementById('header-info').textContent = 'Uptime: ' + uptime;
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card"><div class="value">${s.connections}</div><div class="label">Connections</div></div>
+      <div class="stat-card"><div class="value">${s.channels}</div><div class="label">Channels</div></div>
+      <div class="stat-card"><div class="value">${uptime}</div><div class="label">Uptime</div></div>
+    `;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function formatUptime(sec) {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm ' + Math.floor(sec % 60) + 's';
+}
+
+// Users
+async function loadUsers() {
+  try {
+    const r = await jsonRpc('user.list', {});
+    const tbody = document.getElementById('users-tbody');
+    tbody.innerHTML = r.users.map(u => `<tr>
+      <td>${esc(u.nick || '-')}</td>
+      <td>${esc(u.account || '-')}</td>
+      <td>${esc(u.state)}</td>
+      <td>
+        <button class="btn btn-primary" onclick="showUserInfo('${esc(u.nick)}')">Info</button>
+        <button class="btn btn-primary" onclick="promptSendMessage('${esc(u.nick)}')">Message</button>
+        <button class="btn btn-danger" onclick="kickUser('${esc(u.nick)}')">Kick</button>
+      </td>
+    </tr>`).join('');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function showUserInfo(nick) {
+  try {
+    const u = await jsonRpc('user.info', { nick });
+    if (u.error) { toast(u.error, 'error'); return; }
+    showModal(`<h3>User: ${esc(u.nick)}</h3>
+      <table>
+        <tr><td>Username</td><td>${esc(u.user || '-')}</td></tr>
+        <tr><td>Hostname</td><td>${esc(u.host || '-')}</td></tr>
+        <tr><td>Account</td><td>${esc(u.account || '-')}</td></tr>
+        <tr><td>Modes</td><td>${esc(u.modes || '-')}</td></tr>
+        <tr><td>Channels</td><td>${esc((u.channels||[]).join(', ') || '-')}</td></tr>
+        <tr><td>Connected</td><td>${new Date(u.connected_at).toLocaleString()}</td></tr>
+        <tr><td>Idle</td><td>${Math.floor(u.idle_seconds)}s</td></tr>
+      </table>
+      <div class="actions"><button class="btn btn-primary" onclick="closeModal()">Close</button></div>`);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function kickUser(nick) {
+  if (!confirm('Kick ' + nick + '?')) return;
+  try {
+    await jsonRpc('user.kick', { nick, reason: 'Kicked via admin panel' });
+    toast('User kicked');
+    loadUsers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function promptSendMessage(nick) {
+  showModal(`<h3>Send Message to ${esc(nick)}</h3>
+    <input id="msg-text" placeholder="Message" style="width:100%;padding:.5rem;margin:.5rem 0;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);">
+    <div class="actions">
+      <button class="btn btn-primary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-success" onclick="sendMsg('${esc(nick)}')">Send</button>
+    </div>`);
+  setTimeout(() => document.getElementById('msg-text')?.focus(), 100);
+}
+
+async function sendMsg(nick) {
+  const msg = document.getElementById('msg-text').value;
+  if (!msg) return;
+  try {
+    await jsonRpc('user.message', { nick, message: msg });
+    toast('Message sent');
+    closeModal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Channels
+async function loadChannels() {
+  try {
+    const r = await jsonRpc('channel.list', {});
+    const tbody = document.getElementById('channels-tbody');
+    tbody.innerHTML = r.channels.map(c => `<tr>
+      <td>${esc(c.name)}</td>
+      <td>${c.members}</td>
+      <td>${esc(c.topic || '-')}</td>
+      <td>
+        <button class="btn btn-primary" onclick="showChannelInfo('${esc(c.name)}')">Info</button>
+        <button class="btn btn-primary" onclick="promptSetTopic('${esc(c.name)}')">Topic</button>
+        <button class="btn btn-danger" onclick="deleteChannel('${esc(c.name)}')">Delete</button>
+      </td>
+    </tr>`).join('');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createChannel() {
+  const name = document.getElementById('new-chan-name').value.trim();
+  if (!name) return;
+  try {
+    await jsonRpc('channel.create', { channel: name });
+    toast('Channel created');
+    document.getElementById('new-chan-name').value = '';
+    loadChannels();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function showChannelInfo(name) {
+  try {
+    const c = await jsonRpc('channel.info', { channel: name });
+    if (c.error) { toast(c.error, 'error'); return; }
+    const members = (c.members||[]).map(m => (m.prefix||'') + m.nick).join(', ');
+    showModal(`<h3>Channel: ${esc(c.name)}</h3>
+      <table>
+        <tr><td>Topic</td><td>${esc(c.topic || '-')}</td></tr>
+        <tr><td>Modes</td><td>${esc(c.modes || '-')}</td></tr>
+        <tr><td>Members</td><td>${esc(members || '-')}</td></tr>
+        <tr><td>Key</td><td>${esc(c.key || '-')}</td></tr>
+        <tr><td>Limit</td><td>${c.user_limit || '-'}</td></tr>
+        <tr><td>Created</td><td>${new Date(c.created_at).toLocaleString()}</td></tr>
+      </table>
+      <div class="actions"><button class="btn btn-primary" onclick="closeModal()">Close</button></div>`);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function promptSetTopic(name) {
+  showModal(`<h3>Set Topic for ${esc(name)}</h3>
+    <input id="topic-text" placeholder="New topic" style="width:100%;padding:.5rem;margin:.5rem 0;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);">
+    <div class="actions">
+      <button class="btn btn-primary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-success" onclick="setTopic('${esc(name)}')">Set</button>
+    </div>`);
+}
+
+async function setTopic(name) {
+  const topic = document.getElementById('topic-text').value;
+  try {
+    await jsonRpc('channel.topic', { channel: name, topic });
+    toast('Topic updated');
+    closeModal();
+    loadChannels();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteChannel(name) {
+  if (!confirm('Delete channel ' + name + '?')) return;
+  try {
+    await jsonRpc('channel.delete', { channel: name, reason: 'Deleted via admin panel' });
+    toast('Channel deleted');
+    loadChannels();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Bans
+async function loadBans() {
+  try {
+    const r = await jsonRpc('ban.list', {});
+    const tbody = document.getElementById('bans-tbody');
+    tbody.innerHTML = (r.bans||[]).map(b => `<tr>
+      <td>${esc(b.mask)}</td>
+      <td>${esc(b.reason || '-')}</td>
+      <td>${esc(b.set_by)}</td>
+      <td>${new Date(b.set_at).toLocaleString()}</td>
+      <td>${b.expires_at ? new Date(b.expires_at).toLocaleString() : 'Never'}</td>
+      <td><button class="btn btn-danger" onclick="removeBan('${b.id}')">Remove</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2)">No active bans</td></tr>';
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function addBan() {
+  const mask = document.getElementById('ban-mask').value.trim();
+  if (!mask) return;
+  const reason = document.getElementById('ban-reason').value.trim() || undefined;
+  const dur = parseInt(document.getElementById('ban-duration').value) || undefined;
+  try {
+    await jsonRpc('ban.add', { mask, reason, duration: dur });
+    toast('Ban added');
+    document.getElementById('ban-mask').value = '';
+    document.getElementById('ban-reason').value = '';
+    document.getElementById('ban-duration').value = '';
+    loadBans();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function removeBan(id) {
+  if (!confirm('Remove this ban?')) return;
+  try {
+    await jsonRpc('ban.remove', { id });
+    toast('Ban removed');
+    loadBans();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Roles
+async function loadRoles() {
+  try {
+    const r = await jsonRpc('role.list', {});
+    const tbody = document.getElementById('roles-tbody');
+    tbody.innerHTML = (r.roles||[]).map(rl => `<tr>
+      <td>${esc(rl.name)}</td>
+      <td>${rl.position}</td>
+      <td>${rl.server_permissions}</td>
+      <td>${rl.channel_permissions}</td>
+      <td>
+        <button class="btn btn-danger" onclick="deleteRole('${rl.id}')">Delete</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2)">No roles</td></tr>';
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createRole() {
+  const name = document.getElementById('role-name').value.trim();
+  const position = parseInt(document.getElementById('role-position').value) || 0;
+  if (!name) return;
+  try {
+    await jsonRpc('role.create', { name, position, server_permissions: 0, channel_permissions: 0 });
+    toast('Role created');
+    document.getElementById('role-name').value = '';
+    document.getElementById('role-position').value = '';
+    loadRoles();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteRole(id) {
+  if (!confirm('Delete this role?')) return;
+  try {
+    await jsonRpc('role.delete', { id });
+    toast('Role deleted');
+    loadRoles();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function assignRole() {
+  const account = document.getElementById('assign-account').value.trim();
+  const roleId = document.getElementById('assign-role-id').value.trim();
+  if (!account || !roleId) return;
+  try {
+    await jsonRpc('role.assign', { account, role_id: roleId });
+    toast('Role assigned');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function revokeRole() {
+  const account = document.getElementById('assign-account').value.trim();
+  const roleId = document.getElementById('assign-role-id').value.trim();
+  if (!account || !roleId) return;
+  try {
+    await jsonRpc('role.revoke', { account, role_id: roleId });
+    toast('Role revoked');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Server
+async function loadServer() {
+  try {
+    const r = await jsonRpc('server.motd.get', {});
+    document.getElementById('motd-text').value = (r.motd || []).join('\n');
+  } catch (e) { toast(e.message, 'error'); }
+  loadAudit();
+}
+
+async function saveMotd() {
+  const lines = document.getElementById('motd-text').value.split('\n');
+  try {
+    await jsonRpc('server.motd.set', { motd: lines });
+    toast('MOTD saved');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function setOper() {
+  const name = document.getElementById('oper-name').value.trim();
+  const password = document.getElementById('oper-password').value;
+  if (!name || !password) return;
+  try {
+    await jsonRpc('server.oper.set', { name, password });
+    toast('Oper credentials updated');
+    document.getElementById('oper-password').value = '';
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function rehash() {
+  try {
+    await jsonRpc('server.rehash', {});
+    toast('Config rehashed');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function shutdown() {
+  try {
+    await jsonRpc('server.shutdown', {});
+    toast('Server shutting down');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadAudit() {
+  try {
+    const r = await jsonRpc('audit.query', { limit: 50 });
+    const tbody = document.getElementById('audit-tbody');
+    tbody.innerHTML = (r.entries||[]).map(e => `<tr>
+      <td>${new Date(e.timestamp).toLocaleString()}</td>
+      <td>${esc(e.action)}</td>
+      <td>${esc(e.actor)}</td>
+      <td>${esc(e.target || '-')}</td>
+      <td>${esc(e.details || '-')}</td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text2)">No audit entries</td></tr>';
+  } catch (e) { /* audit may not be available */ }
+}
+
+// Modal
+function showModal(html) {
+  document.getElementById('modal').innerHTML = html;
+  document.getElementById('modal-bg').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal-bg').classList.add('hidden');
+}
+
+// Escape HTML
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>

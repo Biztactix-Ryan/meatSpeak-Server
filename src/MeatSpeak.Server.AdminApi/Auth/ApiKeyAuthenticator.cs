@@ -1,8 +1,5 @@
 namespace MeatSpeak.Server.AdminApi.Auth;
 
-using System.Security.Cryptography;
-using System.Text;
-
 public sealed class ApiKeyAuthenticator
 {
     private readonly List<ApiKeyEntry> _keys;
@@ -14,11 +11,9 @@ public sealed class ApiKeyAuthenticator
 
     public bool Authenticate(string apiKey, string? method = null)
     {
-        var hash = HashKey(apiKey);
-
         foreach (var entry in _keys)
         {
-            if (string.Equals(entry.KeyHash, hash, StringComparison.OrdinalIgnoreCase))
+            if (PasswordHasher.VerifyPassword(apiKey, entry.KeyHash))
             {
                 if (method != null && entry.AllowedMethods != null && entry.AllowedMethods.Count > 0)
                     return entry.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase);
@@ -29,9 +24,11 @@ public sealed class ApiKeyAuthenticator
         return false;
     }
 
-    public static string HashKey(string apiKey)
+    /// <summary>
+    /// Generates an Argon2id hash suitable for storing in configuration.
+    /// </summary>
+    public static string GenerateHash(string apiKey)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(apiKey));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        return PasswordHasher.HashPassword(apiKey);
     }
 }

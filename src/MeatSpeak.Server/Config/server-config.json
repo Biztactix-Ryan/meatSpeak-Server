@@ -20,6 +20,10 @@
   "PingInterval": 60,
   "PingTimeout": 180,
   "Version": "meatspeak-0.1.0",
+  "AdminApi": {
+    "ApiKeys": [],
+    "IpAllowList": []
+  },
   "Tls": {
     "Enabled": false,
     "IrcTlsPort": 6697,

@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server.Handlers.Operator;
 
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.AdminApi.Auth;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
@@ -32,8 +33,14 @@ public sealed class OperHandler : ICommandHandler
             return;
         }
 
-        if (!string.Equals(name, _server.Config.OperName, StringComparison.Ordinal) ||
-            !string.Equals(password, _server.Config.OperPassword, StringComparison.Ordinal))
+        if (!string.Equals(name, _server.Config.OperName, StringComparison.Ordinal))
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_PASSWDMISMATCH,
+                "Password incorrect");
+            return;
+        }
+
+        if (!PasswordHasher.VerifyPassword(password, _server.Config.OperPassword))
         {
             await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_PASSWDMISMATCH,
                 "Password incorrect");
