@@ -144,7 +144,8 @@ builder.Services.AddSingleton<IAdminMethod, ServerShutdownMethod>();
 builder.Services.AddSingleton<IAdminMethod, ServerOperSetMethod>();
 builder.Services.AddSingleton<IAdminMethod, UserListMethod>();
 builder.Services.AddSingleton<IAdminMethod, UserInfoMethod>();
-builder.Services.AddSingleton<IAdminMethod, UserKickMethod>();
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new UserKickMethod(sp.GetRequiredService<IServer>(), sp.GetService<IAuditLogRepository>()));
 builder.Services.AddSingleton<IAdminMethod, UserMessageMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelListMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelInfoMethod>();
@@ -153,33 +154,85 @@ builder.Services.AddSingleton<IAdminMethod, ChannelModeMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelCreateMethod>();
 builder.Services.AddSingleton<IAdminMethod, ChannelDeleteMethod>();
 
-// Ban and Role methods require repository services — register only if available
+// Ban, Role, and Audit methods require database services — register only when available
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new BanListMethod(sp.GetRequiredService<IBanRepository>()));
+{
+    var bans = sp.GetService<IBanRepository>();
+    if (bans == null) return new StubMethod("ban.list");
+    return new BanListMethod(bans);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new BanAddMethod(sp.GetRequiredService<IBanRepository>(), sp.GetService<IAuditLogRepository>()));
+{
+    var bans = sp.GetService<IBanRepository>();
+    if (bans == null) return new StubMethod("ban.add");
+    return new BanAddMethod(bans, sp.GetService<IAuditLogRepository>());
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new BanRemoveMethod(sp.GetRequiredService<IBanRepository>(), sp.GetService<IAuditLogRepository>()));
+{
+    var bans = sp.GetService<IBanRepository>();
+    if (bans == null) return new StubMethod("ban.remove");
+    return new BanRemoveMethod(bans, sp.GetService<IAuditLogRepository>());
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new BanCheckMethod(sp.GetRequiredService<IBanRepository>()));
+{
+    var bans = sp.GetService<IBanRepository>();
+    if (bans == null) return new StubMethod("ban.check");
+    return new BanCheckMethod(bans);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleListMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.list");
+    return new RoleListMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleGetMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.get");
+    return new RoleGetMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleCreateMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.create");
+    return new RoleCreateMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleUpdateMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.update");
+    return new RoleUpdateMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleDeleteMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.delete");
+    return new RoleDeleteMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleAssignMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.assign");
+    return new RoleAssignMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleRevokeMethod(sp.GetRequiredService<IPermissionService>()));
+{
+    var perms = sp.GetService<IPermissionService>();
+    if (perms == null) return new StubMethod("role.revoke");
+    return new RoleRevokeMethod(perms);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new RoleMembersMethod(sp.GetRequiredService<IRoleRepository>()));
+{
+    var roles = sp.GetService<IRoleRepository>();
+    if (roles == null) return new StubMethod("role.members");
+    return new RoleMembersMethod(roles);
+});
 builder.Services.AddSingleton<IAdminMethod>(sp =>
-    new AuditQueryMethod(sp.GetRequiredService<IAuditLogRepository>()));
+{
+    var audit = sp.GetService<IAuditLogRepository>();
+    if (audit == null) return new StubMethod("audit.query");
+    return new AuditQueryMethod(audit);
+});
 
 // Admin API — JSON-RPC processor
 builder.Services.AddSingleton<JsonRpcProcessor>();
