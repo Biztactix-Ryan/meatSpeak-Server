@@ -37,6 +37,8 @@ public static class Numerics
     public const int RPL_WHOREPLY = 352;
     public const int RPL_NAMREPLY = 353;
     public const int RPL_ENDOFNAMES = 366;
+    public const int RPL_BANLIST = 367;
+    public const int RPL_ENDOFBANLIST = 368;
 
     // MOTD
     public const int RPL_MOTD = 372;
