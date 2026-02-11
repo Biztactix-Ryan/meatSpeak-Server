@@ -33,33 +33,32 @@ public sealed class ApiKeyAuthenticator
         var hash = HashKey(apiKey);
         var hashBytes = Convert.FromHexString(hash);
 
-        bool foundMatch = false;
-        bool result = false;
+        ApiKeyEntry? matchedEntry = null;
 
+        // Iterate through all keys with constant-time comparison
         foreach (var (entry, entryHashBytes) in _keys)
         {
-            // Always call FixedTimeEquals to maintain constant time, even for invalid entries
             bool hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
 
-            // Use conditional logic instead of early returns to maintain constant time
-            if (hashMatches && !foundMatch)
+            // Use conditional assignment without short-circuit evaluation
+            // Only set matchedEntry if we haven't found a match yet
+            if (hashMatches & (matchedEntry == null))
             {
-                foundMatch = true;
-                
-                // Check method permissions
-                bool hasMethodRestriction = method != null && entry.AllowedMethods != null && entry.AllowedMethods.Count > 0;
-                if (hasMethodRestriction)
-                {
-                    result = entry.AllowedMethods!.Contains(method!, StringComparer.OrdinalIgnoreCase);
-                }
-                else
-                {
-                    result = true;
-                }
+                matchedEntry = entry;
             }
         }
 
-        return result;
+        // No match found
+        if (matchedEntry == null)
+            return false;
+
+        // Check method permissions only after constant-time loop completes
+        if (method != null && matchedEntry.AllowedMethods != null && matchedEntry.AllowedMethods.Count > 0)
+        {
+            return matchedEntry.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return true;
     }
 
     public static string HashKey(string apiKey)
