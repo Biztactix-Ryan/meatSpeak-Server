@@ -5,8 +5,10 @@ using System.Text;
 
 public sealed class ApiKeyAuthenticator
 {
+    private const int Sha256HashLengthBytes = 32;
+    
     private readonly List<(ApiKeyEntry Entry, byte[] HashBytes)> _keys;
-    private static readonly byte[] DummyHash = new byte[32]; // SHA-256 produces 32 bytes
+    private static readonly byte[] DummyHash = new byte[Sha256HashLengthBytes];
 
     public ApiKeyAuthenticator(IEnumerable<ApiKeyEntry> keys)
     {
@@ -16,7 +18,7 @@ public sealed class ApiKeyAuthenticator
             {
                 var hashBytes = Convert.FromHexString(entry.KeyHash);
                 // Validate expected length (SHA-256 = 32 bytes)
-                if (hashBytes.Length != 32)
+                if (hashBytes.Length != Sha256HashLengthBytes)
                     return (entry, DummyHash);
                 return (entry, hashBytes);
             }
@@ -34,6 +36,7 @@ public sealed class ApiKeyAuthenticator
         var hashBytes = Convert.FromHexString(hash);
 
         ApiKeyEntry? matchedEntry = null;
+        bool foundMatch = false;
 
         // Iterate through all keys with constant-time comparison
         foreach (var (entry, entryHashBytes) in _keys)
@@ -41,10 +44,11 @@ public sealed class ApiKeyAuthenticator
             bool hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
 
             // Use conditional assignment without short-circuit evaluation
-            // Only set matchedEntry if we haven't found a match yet
-            if (hashMatches & (matchedEntry == null))
+            // Only set matchedEntry on first match to enforce "first match wins" policy
+            if (hashMatches & !foundMatch)
             {
                 matchedEntry = entry;
+                foundMatch = true;
             }
         }
 
