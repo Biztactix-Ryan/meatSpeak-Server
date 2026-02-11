@@ -202,7 +202,7 @@ public class MessageBuilderTests
         
         // Caller truncates their message to fit
         var originalMessage = new string('X', 1000); // Very long message
-        var truncatedMessage = originalMessage.Substring(0, maxContentLength);
+        var truncatedMessage = originalMessage[..maxContentLength];
         
         int written = MessageBuilder.Write(buffer, prefix, command, target, truncatedMessage);
         
