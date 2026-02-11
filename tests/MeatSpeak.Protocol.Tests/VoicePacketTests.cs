@@ -136,6 +136,7 @@ public class VoicePacketTests
     {
         var data = new byte[VoicePacket.HeaderSize];
         data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
         data[2] = (byte)VoicePacketFlags.E2E;
 
         VoicePacket.TryParse(data, out var packet);
@@ -150,6 +151,7 @@ public class VoicePacketTests
     {
         var data = new byte[VoicePacket.HeaderSize];
         data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
         data[2] = (byte)VoicePacketFlags.Spatial;
 
         VoicePacket.TryParse(data, out var packet);
@@ -164,6 +166,7 @@ public class VoicePacketTests
     {
         var data = new byte[VoicePacket.HeaderSize];
         data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
         data[2] = (byte)VoicePacketFlags.Priority;
 
         VoicePacket.TryParse(data, out var packet);
@@ -178,6 +181,7 @@ public class VoicePacketTests
     {
         var data = new byte[VoicePacket.HeaderSize];
         data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
         data[2] = (byte)(VoicePacketFlags.E2E | VoicePacketFlags.Spatial | VoicePacketFlags.Priority);
 
         VoicePacket.TryParse(data, out var packet);
@@ -192,12 +196,81 @@ public class VoicePacketTests
     {
         var data = new byte[VoicePacket.HeaderSize];
         data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
         data[2] = (byte)VoicePacketFlags.None;
 
         VoicePacket.TryParse(data, out var packet);
 
         Assert.False(packet.HasE2E);
         Assert.False(packet.HasSpatial);
+        Assert.False(packet.HasPriority);
+    }
+
+    [Fact]
+    public void TryParse_InvalidPacketType_ReturnsFalse()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = 0xFF; // Invalid type value (not 0x01, 0x02, or 0x03)
+        data[2] = (byte)VoicePacketFlags.None;
+
+        var result = VoicePacket.TryParse(data, out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TryParse_ZeroPacketType_ReturnsFalse()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = 0x00; // Zero is not a valid VoicePacketType
+        data[2] = (byte)VoicePacketFlags.None;
+
+        var result = VoicePacket.TryParse(data, out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TryParse_InvalidFlags_ReturnsFalse()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
+        data[2] = 0x08; // Bit 3 is not a valid flag (valid flags use bits 0, 1, 2)
+
+        var result = VoicePacket.TryParse(data, out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TryParse_MultipleInvalidFlags_ReturnsFalse()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
+        data[2] = 0xF0; // Upper 4 bits are not valid flags
+
+        var result = VoicePacket.TryParse(data, out _);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TryParse_ValidFlagsCombination_Succeeds()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
+        data[2] = (byte)(VoicePacketFlags.E2E | VoicePacketFlags.Spatial); // Valid combination
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.True(packet.HasE2E);
+        Assert.True(packet.HasSpatial);
         Assert.False(packet.HasPriority);
     }
 }

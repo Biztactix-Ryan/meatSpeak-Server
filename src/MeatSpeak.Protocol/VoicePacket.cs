@@ -31,8 +31,19 @@ public ref struct VoicePacket
         if (packet.Version != CurrentVersion)
             return false;
 
-        packet.Type = (VoicePacketType)data[1];
-        packet.Flags = (VoicePacketFlags)data[2];
+        // Validate VoicePacketType enum
+        var typeValue = data[1];
+        if (!System.Enum.IsDefined(typeof(VoicePacketType), typeValue))
+            return false;
+
+        // Validate VoicePacketFlags - check that only defined flag bits are set
+        var flagsValue = data[2];
+        const byte ValidFlagsMask = (byte)(VoicePacketFlags.E2E | VoicePacketFlags.Spatial | VoicePacketFlags.Priority);
+        if ((flagsValue & ~ValidFlagsMask) != 0)
+            return false;
+
+        packet.Type = (VoicePacketType)typeValue;
+        packet.Flags = (VoicePacketFlags)flagsValue;
         packet.Ssrc = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data[3..]);
         packet.Sequence = System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data[7..]);
         packet.Timestamp = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data[9..]);
