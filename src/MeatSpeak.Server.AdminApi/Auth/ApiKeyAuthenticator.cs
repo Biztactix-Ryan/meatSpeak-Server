@@ -5,11 +5,23 @@ using System.Text;
 
 public sealed class ApiKeyAuthenticator
 {
-    private readonly List<ApiKeyEntry> _keys;
+    private readonly List<(ApiKeyEntry Entry, byte[] HashBytes)> _keys;
 
     public ApiKeyAuthenticator(IEnumerable<ApiKeyEntry> keys)
     {
-        _keys = keys.ToList();
+        _keys = keys.Select(entry => 
+        {
+            try
+            {
+                var hashBytes = Convert.FromHexString(entry.KeyHash);
+                return (entry, hashBytes);
+            }
+            catch (FormatException)
+            {
+                // Skip malformed hash entries
+                return (entry, Array.Empty<byte>());
+            }
+        }).ToList();
     }
 
     public bool Authenticate(string apiKey, string? method = null)
@@ -20,10 +32,15 @@ public sealed class ApiKeyAuthenticator
         bool foundMatch = false;
         bool result = false;
 
-        foreach (var entry in _keys)
+        foreach (var (entry, entryHashBytes) in _keys)
         {
-            var entryHashBytes = Convert.FromHexString(entry.KeyHash);
-            bool hashMatches = CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
+            // Skip entries with invalid hash format
+            if (entryHashBytes.Length == 0)
+                continue;
+
+            // FixedTimeEquals requires equal length arrays; use standard comparison to avoid exception
+            bool hashMatches = hashBytes.Length == entryHashBytes.Length 
+                && CryptographicOperations.FixedTimeEquals(hashBytes, entryHashBytes);
 
             if (hashMatches && !foundMatch)
             {

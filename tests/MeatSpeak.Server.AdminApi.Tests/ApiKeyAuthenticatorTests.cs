@@ -68,7 +68,7 @@ public class ApiKeyAuthenticatorTests
     }
 
     [Fact]
-    public void Authenticate_MultipleKeys_FirstMatchWins()
+    public void Authenticate_MultipleKeys_MatchesCorrectKey()
     {
         var hash1 = ApiKeyAuthenticator.HashKey("key1");
         var hash2 = ApiKeyAuthenticator.HashKey("key2");
@@ -87,7 +87,7 @@ public class ApiKeyAuthenticatorTests
     }
 
     [Fact]
-    public void Authenticate_MultipleKeysWithSameHash_FirstMatchWins()
+    public void Authenticate_MultipleKeysWithSameHash_UsesFirstMatchPermissions()
     {
         var hash = ApiKeyAuthenticator.HashKey("shared-key");
         
@@ -110,5 +110,21 @@ public class ApiKeyAuthenticatorTests
         // Should use first match, which has restrictions
         Assert.True(auth.Authenticate("shared-key", "server.stats"));
         Assert.False(auth.Authenticate("shared-key", "server.shutdown"));
+    }
+
+    [Fact]
+    public void Authenticate_MalformedHash_SkipsInvalidEntry()
+    {
+        var validHash = ApiKeyAuthenticator.HashKey("valid-key");
+        
+        var keys = new[]
+        {
+            new ApiKeyEntry { Name = "invalid", KeyHash = "not-a-valid-hex-string" },
+            new ApiKeyEntry { Name = "valid", KeyHash = validHash }
+        };
+        
+        var auth = new ApiKeyAuthenticator(keys);
+        Assert.True(auth.Authenticate("valid-key"));
+        Assert.False(auth.Authenticate("invalid-key"));
     }
 }
