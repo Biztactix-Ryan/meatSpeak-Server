@@ -6,6 +6,7 @@ using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
+using MeatSpeak.Server.Handlers.Connection;
 using MeatSpeak.Server.Numerics;
 using Microsoft.Extensions.Logging;
 
@@ -50,6 +51,9 @@ public sealed class RegistrationPipeline
         _metrics.RecordRegistrationDuration(ServerMetrics.GetElapsedMs(session.Info.ConnectTimestamp));
 
         _server.Events.Publish(new SessionRegisteredEvent(session.Id, session.Info.Nickname));
+
+        // MONITOR: notify watchers that this nick is now online
+        await MonitorHandler.NotifyOnline(_server, session);
 
         // Log user history
         _writeQueue?.TryWrite(new AddUserHistory(new UserHistoryEntity

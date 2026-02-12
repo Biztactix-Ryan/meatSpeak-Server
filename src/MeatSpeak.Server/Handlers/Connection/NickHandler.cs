@@ -93,6 +93,10 @@ public sealed class NickHandler : ICommandHandler
             }
 
             _server.Events.Publish(new NickChangedEvent(session.Id, oldNick, newNick));
+
+            // MONITOR: notify watchers of old nick going offline, new nick coming online
+            await MonitorHandler.NotifyOffline(_server, oldNick);
+            await MonitorHandler.NotifyOnline(_server, session);
         }
 
         if (session.State < SessionState.Registered)

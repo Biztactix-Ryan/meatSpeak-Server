@@ -146,13 +146,35 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         session.Info.LastActivity = DateTimeOffset.UtcNow;
         _metrics.CommandDispatched();
 
+        // Extract label tag for labeled-response support
+        string? label = null;
+        if (Capabilities.CapHelper.HasCap(session, "labeled-response") && message.Tags != null)
+        {
+            var parsed = message.ParsedTags;
+            parsed.TryGetValue("label", out label);
+        }
+
         // Fire and forget the handler (we're on the transport callback thread)
         _ = Task.Run(async () =>
         {
             var start = ServerMetrics.GetTimestamp();
             try
             {
+                // Set up labeled-response tracking
+                session.Info.CurrentLabel = label;
+                session.Info.LabeledMessageCount = 0;
+
                 await handler.HandleAsync(session, message);
+
+                // If a label was set and no messages were sent, send ACK
+                if (label != null && session.Info.LabeledMessageCount == 0)
+                {
+                    var tags = Capabilities.CapHelper.BuildTags(session);
+                    if (tags != null)
+                        await session.SendTaggedMessageAsync(tags, _server.Config.ServerName, IrcConstants.ACK, "*");
+                    else
+                        await session.SendMessageAsync(_server.Config.ServerName, IrcConstants.ACK, "*");
+                }
             }
             catch (Exception ex)
             {
@@ -161,6 +183,8 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             }
             finally
             {
+                session.Info.CurrentLabel = null;
+                session.Info.LabeledMessageCount = 0;
                 _metrics.RecordCommandDuration(commandStr, ServerMetrics.GetElapsedMs(start));
             }
         });
@@ -232,6 +256,10 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 }
 
                 _server.Events.Publish(new SessionDisconnectedEvent(session.Id, quitReason));
+
+                // MONITOR: notify watchers that this nick is now offline
+                if (nick != null)
+                    await Handlers.Connection.MonitorHandler.NotifyOffline(_server, nick);
             }
             catch (Exception ex)
             {

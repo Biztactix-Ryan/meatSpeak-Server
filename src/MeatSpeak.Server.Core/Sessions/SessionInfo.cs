@@ -20,6 +20,15 @@ public sealed class SessionInfo
     public string? AwayMessage { get; set; }
     public FloodLimiter? FloodLimiter { get; set; }
 
+    // MONITOR: set of nicknames this session is monitoring
+    public HashSet<string> MonitorList { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // Labeled-response: the current label tag for the command being processed
+    public string? CurrentLabel { get; set; }
+
+    // Labeled-response: tracks how many messages have been sent for the current labeled command
+    public int LabeledMessageCount { get; set; }
+
     public string Prefix => Nickname != null && Username != null && Hostname != null
         ? $"{Nickname}!{Username}@{Hostname}"
         : Nickname ?? "*";

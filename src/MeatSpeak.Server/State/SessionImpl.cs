@@ -42,6 +42,7 @@ public sealed class SessionImpl : ISession
         Span<byte> buffer = stackalloc byte[IrcConstants.MaxLineLengthWithTags];
         int written = MessageBuilder.Write(buffer, prefix, command, parameters);
         _connection.Send(buffer[..written]);
+        Info.LabeledMessageCount++;
         return ValueTask.CompletedTask;
     }
 
@@ -50,6 +51,7 @@ public sealed class SessionImpl : ISession
         Span<byte> buffer = stackalloc byte[IrcConstants.MaxLineLengthWithTags];
         int written = MessageBuilder.WriteWithTags(buffer, tags, prefix, command, parameters);
         _connection.Send(buffer[..written]);
+        Info.LabeledMessageCount++;
         return ValueTask.CompletedTask;
     }
 
@@ -59,6 +61,7 @@ public sealed class SessionImpl : ISession
         var target = Info.Nickname ?? "*";
         int written = MessageBuilder.WriteNumeric(buffer, serverName, numeric, target, parameters);
         _connection.Send(buffer[..written]);
+        Info.LabeledMessageCount++;
         return ValueTask.CompletedTask;
     }
 

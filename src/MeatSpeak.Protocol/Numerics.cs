@@ -77,6 +77,13 @@ public static class Numerics
     public const int RPL_VOICEKEY = 754;
     public const int RPL_VOICEERROR = 755;
 
+    // Monitor
+    public const int RPL_MONONLINE = 730;
+    public const int RPL_MONOFFLINE = 731;
+    public const int RPL_MONLIST = 732;
+    public const int RPL_ENDOFMONLIST = 733;
+    public const int ERR_MONLISTFULL = 734;
+
     // Errors
     public const int ERR_NOSUCHNICK = 401;
     public const int ERR_NOSUCHSERVER = 402;

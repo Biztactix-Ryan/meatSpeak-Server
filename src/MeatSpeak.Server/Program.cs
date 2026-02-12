@@ -154,6 +154,7 @@ builder.Services.AddScoped<IChannelRepository, ChannelRepository>();
 builder.Services.AddScoped<ITopicHistoryRepository, TopicHistoryRepository>();
 builder.Services.AddScoped<IUserHistoryRepository, UserHistoryRepository>();
 builder.Services.AddScoped<IChatLogRepository, ChatLogRepository>();
+builder.Services.AddScoped<IUserAccountRepository, UserAccountRepository>();
 builder.Services.AddScoped<IPermissionService>(sp =>
     new PermissionService(sp.GetRequiredService<MeatSpeakDbContext>(), config.OwnerAccount));
 builder.Services.AddScoped<DatabaseSeeder>();
@@ -304,6 +305,10 @@ builder.Services.AddSingleton<IAdminMethod>(sp =>
     new ScopedMethod("topichistory.query", sp.GetRequiredService<IServiceScopeFactory>(),
         svc => new TopicHistoryQueryMethod(svc.GetRequiredService<ITopicHistoryRepository>())));
 
+builder.Services.AddSingleton<IAdminMethod>(sp =>
+    new ScopedMethod("account.create", sp.GetRequiredService<IServiceScopeFactory>(),
+        svc => new AccountCreateMethod(svc.GetRequiredService<IUserAccountRepository>())));
+
 // Admin API — JSON-RPC processor
 builder.Services.AddSingleton<JsonRpcProcessor>();
 
@@ -412,6 +417,7 @@ server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability(
 server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("draft/chathistory"));
 server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("draft/message-redaction"));
 server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("draft/event-playback"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("labeled-response"));
 
 // Connection handlers
 server.Commands.Register(new PingHandler());
@@ -422,6 +428,7 @@ server.Commands.Register(new UserHandler(server, registration));
 server.Commands.Register(new QuitHandler(writeQueue));
 server.Commands.Register(new CapHandler(server, registration));
 server.Commands.Register(new AwayHandler(server));
+server.Commands.Register(new MonitorHandler(server));
 
 // Messaging handlers
 server.Commands.Register(new PrivmsgHandler(server, writeQueue, metrics));
@@ -457,7 +464,7 @@ server.Commands.Register(new RehashHandler(server));
 server.Commands.Register(new VoiceHandler());
 
 // Auth handler (SASL PLAIN)
-server.Commands.Register(new AuthenticateHandler(server));
+server.Commands.Register(new AuthenticateHandler(server, scopeFactory));
 
 // Wire up middleware
 

@@ -2,20 +2,25 @@ namespace MeatSpeak.Server.Handlers.Auth;
 
 using System.Text;
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.AdminApi.Auth;
 using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 
 public sealed class AuthenticateHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly IServiceScopeFactory _scopeFactory;
     public string Command => IrcConstants.AUTHENTICATE;
     public SessionState MinimumState => SessionState.Connecting;
 
-    public AuthenticateHandler(IServer server)
+    public AuthenticateHandler(IServer server, IServiceScopeFactory scopeFactory)
     {
         _server = server;
+        _scopeFactory = scopeFactory;
     }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
@@ -75,10 +80,25 @@ public sealed class AuthenticateHandler : ICommandHandler
             return;
         }
 
-        var (_, username, _) = parts.Value;
+        var (_, username, password) = parts.Value;
+
+        // Validate credentials against the database
+        using var scope = _scopeFactory.CreateScope();
+        var accountRepo = scope.ServiceProvider.GetRequiredService<IUserAccountRepository>();
+        var account = await accountRepo.GetByAccountAsync(username, ct);
+
+        if (account == null || !PasswordHasher.VerifyPassword(password, account.PasswordHash))
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_SASLFAIL,
+                "SASL authentication failed");
+            return;
+        }
 
         // Set the account name
         session.Info.Account = username;
+
+        // Update last login timestamp
+        await accountRepo.UpdateLastLoginAsync(username, DateTimeOffset.UtcNow, ct);
 
         // RPL_LOGGEDIN: <nick>!<user>@<host> <account> :You are now logged in as <username>
         var prefix = session.Info.Prefix;

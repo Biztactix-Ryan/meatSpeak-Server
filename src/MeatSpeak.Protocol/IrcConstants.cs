@@ -48,4 +48,6 @@ public static class IrcConstants
     public const string TAGMSG = "TAGMSG";
     public const string REDACT = "REDACT";
     public const string CHATHISTORY = "CHATHISTORY";
+    public const string MONITOR = "MONITOR";
+    public const string ACK = "ACK";
 }

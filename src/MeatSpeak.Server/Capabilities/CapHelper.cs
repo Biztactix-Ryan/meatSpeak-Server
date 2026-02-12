@@ -15,11 +15,16 @@ public static class CapHelper
 
     /// <summary>
     /// Builds a composable tag string for a target session, including server-time,
-    /// msgid, and any extra tags as appropriate based on the session's caps.
+    /// msgid, label, and any extra tags as appropriate based on the session's caps.
     /// </summary>
     public static string? BuildTags(ISession target, string? msgId = null, string? extraTags = null)
     {
-        var parts = new List<string>(3);
+        var parts = new List<string>(4);
+
+        // labeled-response: include label tag if this is a response to a labeled command
+        var label = target.Info.CurrentLabel;
+        if (label != null && HasCap(target, "labeled-response"))
+            parts.Add($"label={label}");
 
         if (HasCap(target, "server-time"))
             parts.Add(TimeTag());

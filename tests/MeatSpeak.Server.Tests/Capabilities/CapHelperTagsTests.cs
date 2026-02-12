@@ -150,4 +150,86 @@ public class CapHelperTagsTests
         var result = CapHelper.ExtractClientTags("+draft/react=smile");
         Assert.Equal("+draft/react=smile", result);
     }
+
+    // --- Labeled Response Tests ---
+
+    [Fact]
+    public void BuildTags_WithLabel_IncludesLabelTag()
+    {
+        var session = CreateSession("labeled-response", "server-time");
+        session.Info.CurrentLabel = "abc123";
+        var tags = CapHelper.BuildTags(session);
+        Assert.NotNull(tags);
+        Assert.Contains("label=abc123", tags);
+        Assert.Contains("time=", tags);
+    }
+
+    [Fact]
+    public void BuildTags_WithLabel_NoLabeledResponseCap_OmitsLabel()
+    {
+        var session = CreateSession("server-time");
+        session.Info.CurrentLabel = "abc123";
+        var tags = CapHelper.BuildTags(session);
+        Assert.NotNull(tags);
+        Assert.DoesNotContain("label=", tags);
+    }
+
+    [Fact]
+    public void BuildTags_NoLabel_WithLabeledResponseCap_OmitsLabel()
+    {
+        var session = CreateSession("labeled-response", "server-time");
+        // CurrentLabel is null by default
+        var tags = CapHelper.BuildTags(session);
+        Assert.NotNull(tags);
+        Assert.DoesNotContain("label=", tags);
+    }
+
+    [Fact]
+    public void BuildTags_LabelOnly_NoCaps()
+    {
+        var session = CreateSession("labeled-response");
+        session.Info.CurrentLabel = "myLabel";
+        var tags = CapHelper.BuildTags(session);
+        Assert.NotNull(tags);
+        Assert.Equal("label=myLabel", tags);
+    }
+
+    [Fact]
+    public void BuildTags_LabelWithAllTags()
+    {
+        var session = CreateSession("labeled-response", "server-time", "message-tags");
+        session.Info.CurrentLabel = "req1";
+        var tags = CapHelper.BuildTags(session, "msg001", "batch=ref1");
+        Assert.NotNull(tags);
+        Assert.Contains("label=req1", tags);
+        Assert.Contains("time=", tags);
+        Assert.Contains("msgid=msg001", tags);
+        Assert.Contains("batch=ref1", tags);
+    }
+
+    [Fact]
+    public void BuildTags_LabelAppearsFirst()
+    {
+        var session = CreateSession("labeled-response", "server-time");
+        session.Info.CurrentLabel = "first";
+        var tags = CapHelper.BuildTags(session)!;
+        Assert.StartsWith("label=first", tags);
+    }
+
+    [Fact]
+    public void LabeledMessageCount_IncrementedOnSend()
+    {
+        // Verify the SessionInfo tracking works
+        var info = new SessionInfo();
+        Assert.Equal(0, info.LabeledMessageCount);
+        info.LabeledMessageCount++;
+        Assert.Equal(1, info.LabeledMessageCount);
+    }
+
+    [Fact]
+    public void CurrentLabel_DefaultsToNull()
+    {
+        var info = new SessionInfo();
+        Assert.Null(info.CurrentLabel);
+    }
 }

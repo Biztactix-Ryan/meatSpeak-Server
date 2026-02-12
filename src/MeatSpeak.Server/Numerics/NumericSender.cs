@@ -46,6 +46,7 @@ public sealed class NumericSender
             "INVEX=I",
             "MSGREFTYPES=timestamp,msgid",
             "CHATHISTORY=100",
+            "MONITOR=100",
             "are supported by this server",
         };
         await session.SendNumericAsync(config.ServerName, Protocol.Numerics.RPL_ISUPPORT, tokens);

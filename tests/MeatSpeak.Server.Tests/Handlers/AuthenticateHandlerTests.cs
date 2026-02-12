@@ -6,13 +6,18 @@ using IrcNumerics = MeatSpeak.Protocol.Numerics;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.AdminApi.Auth;
+using MeatSpeak.Server.Data.Entities;
+using MeatSpeak.Server.Data.Repositories;
 using MeatSpeak.Server.Handlers.Auth;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MeatSpeak.Server.Tests.Handlers;
 
 public class AuthenticateHandlerTests
 {
     private readonly IServer _server;
+    private readonly IUserAccountRepository _accountRepo;
     private readonly AuthenticateHandler _handler;
 
     public AuthenticateHandlerTests()
@@ -20,7 +25,19 @@ public class AuthenticateHandlerTests
         _server = Substitute.For<IServer>();
         _server.Config.Returns(new ServerConfig { ServerName = "test.server" });
         _server.Events.Returns(Substitute.For<IEventBus>());
-        _handler = new AuthenticateHandler(_server);
+
+        _accountRepo = Substitute.For<IUserAccountRepository>();
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(IUserAccountRepository)).Returns(_accountRepo);
+
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.Returns(serviceProvider);
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(scope);
+
+        _handler = new AuthenticateHandler(_server, scopeFactory);
     }
 
     private ISession CreateSession(string nick, bool saslCap = true)
@@ -32,6 +49,19 @@ public class AuthenticateHandlerTests
         session.Info.Returns(info);
         session.Id.Returns(nick + "-id");
         return session;
+    }
+
+    private void SetupAccount(string username, string password)
+    {
+        var hash = PasswordHasher.HashPassword(password);
+        _accountRepo.GetByAccountAsync(username, Arg.Any<CancellationToken>())
+            .Returns(new UserAccountEntity
+            {
+                Id = Guid.NewGuid(),
+                Account = username,
+                PasswordHash = hash,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
     }
 
     [Fact]
@@ -49,7 +79,7 @@ public class AuthenticateHandlerTests
     public async Task Authenticate_ValidCredentials_SetsAccountAndSendsSuccess()
     {
         var session = CreateSession("User");
-        // PLAIN format: authzid\0authcid\0password
+        SetupAccount("testuser", "testpass");
         var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes("\0testuser\0testpass"));
         var msg = new IrcMessage(null, null, "AUTHENTICATE", new[] { credentials });
 
@@ -59,6 +89,37 @@ public class AuthenticateHandlerTests
         await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_LOGGEDIN,
             Arg.Any<string[]>());
         await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_SASLSUCCESS,
+            Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task Authenticate_WrongPassword_SendsSaslFail()
+    {
+        var session = CreateSession("User");
+        SetupAccount("testuser", "correctpass");
+        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes("\0testuser\0wrongpass"));
+        var msg = new IrcMessage(null, null, "AUTHENTICATE", new[] { credentials });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Null(session.Info.Account);
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.ERR_SASLFAIL,
+            Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task Authenticate_UnknownAccount_SendsSaslFail()
+    {
+        var session = CreateSession("User");
+        _accountRepo.GetByAccountAsync("unknown", Arg.Any<CancellationToken>())
+            .Returns((UserAccountEntity?)null);
+        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes("\0unknown\0password"));
+        var msg = new IrcMessage(null, null, "AUTHENTICATE", new[] { credentials });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Null(session.Info.Account);
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.ERR_SASLFAIL,
             Arg.Any<string[]>());
     }
 
@@ -146,6 +207,7 @@ public class AuthenticateHandlerTests
     public async Task Authenticate_WithAuthzid_SetsAuthcidAsAccount()
     {
         var session = CreateSession("User");
+        SetupAccount("regularuser", "pass");
         // PLAIN with authzid: authzid\0authcid\0password
         var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes("admin\0regularuser\0pass"));
         var msg = new IrcMessage(null, null, "AUTHENTICATE", new[] { credentials });
