@@ -400,6 +400,7 @@ server.Commands.Register(new NickHandler(server, registration));
 server.Commands.Register(new UserHandler(server, registration));
 server.Commands.Register(new QuitHandler(writeQueue));
 server.Commands.Register(new CapHandler(server, registration));
+server.Commands.Register(new AwayHandler(server));
 
 // Messaging handlers
 server.Commands.Register(new PrivmsgHandler(server, writeQueue, metrics));
@@ -416,6 +417,7 @@ server.Commands.Register(new ListHandler(server));
 server.Commands.Register(new InviteHandler(server));
 server.Commands.Register(new WhoHandler(server));
 server.Commands.Register(new WhoisHandler(server));
+server.Commands.Register(new WhowasHandler(server));
 
 // Server info handlers
 server.Commands.Register(new MotdHandler(server, numerics));

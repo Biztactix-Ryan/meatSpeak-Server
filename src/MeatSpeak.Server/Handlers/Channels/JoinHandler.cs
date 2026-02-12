@@ -34,6 +34,28 @@ public sealed class JoinHandler : ICommandHandler
             return;
         }
 
+        // JOIN 0 = part all channels
+        if (message.GetParam(0) == "0")
+        {
+            foreach (var channelName in session.Info.Channels.ToList())
+            {
+                if (_server.Channels.TryGetValue(channelName, out var ch))
+                {
+                    foreach (var (memberNick, _) in ch.Members)
+                    {
+                        var memberSession = _server.FindSessionByNick(memberNick);
+                        if (memberSession != null)
+                            await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PART, channelName);
+                    }
+                    ch.RemoveMember(session.Info.Nickname!);
+                    if (ch.Members.Count == 0)
+                        _server.RemoveChannel(channelName);
+                }
+                session.Info.Channels.Remove(channelName);
+            }
+            return;
+        }
+
         var channelNames = message.GetParam(0)!.Split(',');
         var keys = message.GetParam(1)?.Split(',') ?? Array.Empty<string>();
 

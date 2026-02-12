@@ -149,4 +149,44 @@ public class WhoisHandlerTests
         await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_WHOISUSER,
             Arg.Any<string[]>());
     }
+
+    [Fact]
+    public async Task HandleAsync_ValidWhois_SendsIdleTime()
+    {
+        var target = CreateSession("Alice");
+        var session = CreateSession("Querier");
+        var msg = new IrcMessage(null, null, "WHOIS", new[] { "Alice" });
+
+        await _handler.HandleAsync(session, msg);
+
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_WHOISIDLE,
+            Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_AwayUser_SendsRplAway()
+    {
+        var target = CreateSession("Alice");
+        target.Info.AwayMessage = "On vacation";
+        var session = CreateSession("Querier");
+        var msg = new IrcMessage(null, null, "WHOIS", new[] { "Alice" });
+
+        await _handler.HandleAsync(session, msg);
+
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_AWAY,
+            Arg.Is<string[]>(p => p[0] == "Alice" && p[1] == "On vacation"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_NotAway_NoRplAway()
+    {
+        var target = CreateSession("Alice");
+        var session = CreateSession("Querier");
+        var msg = new IrcMessage(null, null, "WHOIS", new[] { "Alice" });
+
+        await _handler.HandleAsync(session, msg);
+
+        await session.DidNotReceive().SendNumericAsync("test.server", IrcNumerics.RPL_AWAY,
+            Arg.Any<string[]>());
+    }
 }

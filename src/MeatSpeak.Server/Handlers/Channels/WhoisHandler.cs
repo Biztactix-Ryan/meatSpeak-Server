@@ -79,6 +79,19 @@ public sealed class WhoisHandler : ICommandHandler
                 nick, "is an IRC operator");
         }
 
+        // RPL_WHOISIDLE
+        var idleSeconds = (long)(DateTimeOffset.UtcNow - targetSession.Info.LastActivity).TotalSeconds;
+        var signonUnix = targetSession.Info.ConnectedAt.ToUnixTimeSeconds();
+        await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_WHOISIDLE,
+            nick, idleSeconds.ToString(), signonUnix.ToString(), "seconds idle, signon time");
+
+        // RPL_AWAY
+        if (targetSession.Info.AwayMessage != null)
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_AWAY,
+                nick, targetSession.Info.AwayMessage);
+        }
+
         // RPL_ENDOFWHOIS
         await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_ENDOFWHOIS,
             nick, "End of /WHOIS list");

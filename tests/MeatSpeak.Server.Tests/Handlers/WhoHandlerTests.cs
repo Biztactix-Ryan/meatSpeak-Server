@@ -98,4 +98,49 @@ public class WhoHandlerTests
         await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_ENDOFWHO,
             Arg.Any<string[]>());
     }
+
+    [Fact]
+    public async Task HandleAsync_AwayNickWho_ShowsGoneFlag()
+    {
+        var targetSession = CreateSession("Alice");
+        targetSession.Info.AwayMessage = "Away";
+        var session = CreateSession("Querier");
+        var msg = new IrcMessage(null, null, "WHO", new[] { "Alice" });
+
+        await _handler.HandleAsync(session, msg);
+
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_WHOREPLY,
+            Arg.Is<string[]>(p => p[5] == "G"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_HereNickWho_ShowsHereFlag()
+    {
+        var targetSession = CreateSession("Alice");
+        var session = CreateSession("Querier");
+        var msg = new IrcMessage(null, null, "WHO", new[] { "Alice" });
+
+        await _handler.HandleAsync(session, msg);
+
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_WHOREPLY,
+            Arg.Is<string[]>(p => p[5] == "H"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_AwayChannelWho_ShowsGoneFlag()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Alice", new ChannelMembership { Nickname = "Alice" });
+        _channels["#test"] = channel;
+
+        var aliceSession = CreateSession("Alice");
+        aliceSession.Info.AwayMessage = "BRB";
+        var session = CreateSession("Querier");
+        var msg = new IrcMessage(null, null, "WHO", new[] { "#test" });
+
+        await _handler.HandleAsync(session, msg);
+
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_WHOREPLY,
+            Arg.Is<string[]>(p => p[5].StartsWith("G")));
+    }
 }

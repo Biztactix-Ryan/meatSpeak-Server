@@ -42,4 +42,6 @@ public static class IrcConstants
     public const string VOICE = "VOICE";
     public const string AUTHENTICATE = "AUTHENTICATE";
     public const string REHASH = "REHASH";
+    public const string AWAY = "AWAY";
+    public const string WHOWAS = "WHOWAS";
 }

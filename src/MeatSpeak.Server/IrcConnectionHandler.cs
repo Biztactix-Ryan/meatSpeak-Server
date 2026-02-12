@@ -57,6 +57,11 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         var handler = _server.Commands.Resolve(commandStr);
         if (handler == null)
         {
+            if (session.State >= SessionState.Registered)
+            {
+                session.SendNumericAsync(_server.Config.ServerName, IrcNumerics.ERR_UNKNOWNCOMMAND,
+                    commandStr, "Unknown command").AsTask().Wait();
+            }
             _logger.LogDebug("Unknown command {Command} from {Id}", commandStr, session.Id);
             return;
         }
@@ -121,7 +126,16 @@ public sealed class IrcConnectionHandler : IConnectionHandler
 
         var nick = session.Info.Nickname;
         if (nick != null)
+        {
+            // Record WHOWAS entry before removing from nick index
+            _server.RecordWhowas(new Core.Sessions.WhowasEntry(
+                nick,
+                session.Info.Username ?? "~user",
+                session.Info.Hostname ?? "unknown",
+                session.Info.Realname ?? nick,
+                DateTimeOffset.UtcNow));
             _server.UpdateNickIndex(nick, null, session);
+        }
         _server.RemoveSession(session.Id);
 
         // Move broadcast off the transport thread to avoid blocking accept/receive

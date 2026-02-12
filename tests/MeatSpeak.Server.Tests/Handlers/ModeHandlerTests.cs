@@ -68,8 +68,8 @@ public class ModeHandlerTests
 
         await _handler.HandleAsync(session, msg);
 
-        await session.Received().SendMessageAsync("test.server", "MODE",
-            Arg.Is<string[]>(p => p[0] == "TestUser" && p[1] == "+i"));
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_UMODEIS,
+            Arg.Is<string[]>(p => p[0] == "+i"));
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class ModeHandlerTests
 
         await _handler.HandleAsync(session, msg);
 
-        await session.Received().SendNumericAsync("test.server", IrcNumerics.ERR_NOSUCHNICK,
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.ERR_USERSDONTMATCH,
             Arg.Any<string[]>());
     }
 

@@ -40,6 +40,10 @@ public sealed class NumericSender
             "CHANNELLEN=64",
             "TOPICLEN=390",
             "STATUSMSG=@+",
+            "CHANLIMIT=#:25",
+            "MODES=3",
+            "EXCEPTS=e",
+            "INVEX=I",
             "are supported by this server",
         };
         await session.SendNumericAsync(config.ServerName, Protocol.Numerics.RPL_ISUPPORT, tokens);

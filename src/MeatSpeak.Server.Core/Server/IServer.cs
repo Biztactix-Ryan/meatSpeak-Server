@@ -27,6 +27,10 @@ public interface IServer
     IChannel GetOrCreateChannel(string name);
     void RemoveChannel(string name);
 
+    // WHOWAS history
+    void RecordWhowas(Sessions.WhowasEntry entry);
+    IReadOnlyList<Sessions.WhowasEntry> GetWhowas(string nickname, int maxCount = 10);
+
     // Stats
     int ConnectionCount { get; }
     int ChannelCount { get; }

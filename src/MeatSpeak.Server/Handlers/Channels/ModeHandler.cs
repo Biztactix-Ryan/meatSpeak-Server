@@ -38,18 +38,18 @@ public sealed class ModeHandler : ICommandHandler
         // Users can only query/change their own mode
         if (!string.Equals(target, session.Info.Nickname, StringComparison.OrdinalIgnoreCase))
         {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOSUCHNICK,
-                target, "No such nick/channel");
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_USERSDONTMATCH,
+                "Cannot change mode for other users");
             return;
         }
 
         if (message.Parameters.Count < 2)
         {
-            // Query user modes
+            // RPL_UMODEIS - query user modes
             var modeString = session.Info.UserModes.Count > 0
                 ? "+" + new string(session.Info.UserModes.OrderBy(c => c).ToArray())
                 : "+";
-            await session.SendMessageAsync(_server.Config.ServerName, IrcConstants.MODE, target, modeString);
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_UMODEIS, modeString);
             return;
         }
 

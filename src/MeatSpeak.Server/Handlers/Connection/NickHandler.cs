@@ -54,6 +54,14 @@ public sealed class NickHandler : ICommandHandler
 
         if (session.State >= SessionState.Registered && oldNick != null)
         {
+            // Record WHOWAS entry for the old nickname
+            _server.RecordWhowas(new WhowasEntry(
+                oldNick,
+                session.Info.Username ?? "~user",
+                session.Info.Hostname ?? "unknown",
+                session.Info.Realname ?? oldNick,
+                DateTimeOffset.UtcNow));
+
             var prefix = $"{oldNick}!{session.Info.Username}@{session.Info.Hostname}";
 
             // Broadcast to all users sharing a channel (deduplicated), plus the user themselves

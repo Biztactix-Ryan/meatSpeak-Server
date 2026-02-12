@@ -15,6 +15,8 @@ public sealed class ServerState : IServer
     private readonly ConcurrentDictionary<string, ISession> _sessions = new();
     private readonly ConcurrentDictionary<string, ISession> _nickIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, LinkedList<WhowasEntry>> _whowas = new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxWhowasEntries = 100;
     private readonly ServerMetrics? _metrics;
 
     public ServerConfig Config { get; }
@@ -86,4 +88,25 @@ public sealed class ServerState : IServer
     }
 
     public void RemoveChannel(string name) => _channels.TryRemove(name, out _);
+
+    public void RecordWhowas(WhowasEntry entry)
+    {
+        var list = _whowas.GetOrAdd(entry.Nickname, _ => new LinkedList<WhowasEntry>());
+        lock (list)
+        {
+            list.AddFirst(entry);
+            while (list.Count > MaxWhowasEntries)
+                list.RemoveLast();
+        }
+    }
+
+    public IReadOnlyList<WhowasEntry> GetWhowas(string nickname, int maxCount = 10)
+    {
+        if (!_whowas.TryGetValue(nickname, out var list))
+            return Array.Empty<WhowasEntry>();
+        lock (list)
+        {
+            return list.Take(maxCount).ToList();
+        }
+    }
 }

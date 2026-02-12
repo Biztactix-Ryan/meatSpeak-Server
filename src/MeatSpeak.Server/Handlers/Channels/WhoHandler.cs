@@ -28,7 +28,7 @@ public sealed class WhoHandler : ICommandHandler
                     if (memberSession == null)
                         continue;
 
-                    var flags = "H" + membership.PrefixChar;
+                    var flags = (memberSession.Info.AwayMessage != null ? "G" : "H") + membership.PrefixChar;
                     await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_WHOREPLY,
                         target,
                         memberSession.Info.Username ?? "~user",
@@ -46,7 +46,7 @@ public sealed class WhoHandler : ICommandHandler
             var targetSession = _server.FindSessionByNick(target);
             if (targetSession != null)
             {
-                var flags = "H";
+                var flags = targetSession.Info.AwayMessage != null ? "G" : "H";
                 if (targetSession.Info.UserModes.Contains('o'))
                     flags += "*";
 

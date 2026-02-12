@@ -21,11 +21,16 @@ public static class Numerics
     public const int RPL_UNAWAY = 305;
     public const int RPL_NOWAWAY = 306;
 
+    // User mode
+    public const int RPL_UMODEIS = 221;
+
     // Whois / Who
     public const int RPL_WHOISUSER = 311;
     public const int RPL_WHOISSERVER = 312;
     public const int RPL_WHOISOPERATOR = 313;
+    public const int RPL_WHOWASUSER = 314;
     public const int RPL_ENDOFWHO = 315;
+    public const int RPL_WHOISIDLE = 317;
     public const int RPL_ENDOFWHOIS = 318;
     public const int RPL_WHOISCHANNELS = 319;
 
@@ -43,6 +48,7 @@ public static class Numerics
     public const int RPL_ENDOFNAMES = 366;
     public const int RPL_BANLIST = 367;
     public const int RPL_ENDOFBANLIST = 368;
+    public const int RPL_ENDOFWHOWAS = 369;
 
     // MOTD
     public const int RPL_MOTD = 372;
@@ -62,9 +68,15 @@ public static class Numerics
 
     // Errors
     public const int ERR_NOSUCHNICK = 401;
+    public const int ERR_NOSUCHSERVER = 402;
     public const int ERR_NOSUCHCHANNEL = 403;
     public const int ERR_CANNOTSENDTOCHAN = 404;
     public const int ERR_TOOMANYCHANNELS = 405;
+    public const int ERR_WASNOSUCHNICK = 406;
+    public const int ERR_NOORIGIN = 409;
+    public const int ERR_NORECIPIENT = 411;
+    public const int ERR_NOTEXTTOSEND = 412;
+    public const int ERR_UNKNOWNCOMMAND = 421;
     public const int ERR_NONICKNAMEGIVEN = 431;
     public const int ERR_ERRONEUSNICKNAME = 432;
     public const int ERR_NICKNAMEINUSE = 433;
@@ -82,6 +94,8 @@ public static class Numerics
     public const int ERR_NOPRIVILEGES = 481;
     public const int ERR_CHANOPRIVSNEEDED = 482;
     public const int ERR_NOOPERHOST = 491;
+    public const int ERR_UMODEUNKNOWNFLAG = 501;
+    public const int ERR_USERSDONTMATCH = 502;
 
     public static string Format(int numeric) => numeric.ToString("D3");
 }

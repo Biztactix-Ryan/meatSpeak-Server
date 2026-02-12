@@ -26,10 +26,17 @@ public sealed class PrivmsgHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
+        if (message.Parameters.Count < 1)
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NORECIPIENT,
+                "No recipient given (PRIVMSG)");
+            return;
+        }
+
         if (message.Parameters.Count < 2)
         {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.PRIVMSG, "Not enough parameters");
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOTEXTTOSEND,
+                "No text to send");
             return;
         }
 
@@ -79,6 +86,14 @@ public sealed class PrivmsgHandler : ICommandHandler
                 return;
             }
             await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+
+            // RPL_AWAY - notify sender if target is away
+            if (targetSession.Info.AwayMessage != null)
+            {
+                await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_AWAY,
+                    target, targetSession.Info.AwayMessage);
+            }
+
             _metrics?.MessagePrivate();
             _server.Events.Publish(new PrivateMessageEvent(session.Id, session.Info.Nickname!, target, text));
 

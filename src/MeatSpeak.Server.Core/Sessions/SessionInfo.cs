@@ -17,6 +17,7 @@ public sealed class SessionInfo
     public CapNegotiationState CapState { get; } = new();
     public DateTimeOffset ConnectedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset LastActivity { get; set; } = DateTimeOffset.UtcNow;
+    public string? AwayMessage { get; set; }
 
     public string Prefix => Nickname != null && Username != null && Hostname != null
         ? $"{Nickname}!{Username}@{Hostname}"
