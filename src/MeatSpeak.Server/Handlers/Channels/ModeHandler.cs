@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Channels;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
@@ -189,7 +190,7 @@ public sealed class ModeHandler : ICommandHandler
             {
                 var memberSession = _server.FindSessionByNick(memberNick);
                 if (memberSession != null)
-                    await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.MODE, broadcastParams.ToArray());
+                    await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.MODE, broadcastParams.ToArray());
             }
 
             _server.Events.Publish(new ModeChangedEvent(channelName,

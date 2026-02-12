@@ -44,4 +44,5 @@ public static class IrcConstants
     public const string REHASH = "REHASH";
     public const string AWAY = "AWAY";
     public const string WHOWAS = "WHOWAS";
+    public const string BATCH = "BATCH";
 }

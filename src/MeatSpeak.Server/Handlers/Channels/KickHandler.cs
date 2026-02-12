@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
@@ -55,7 +56,7 @@ public sealed class KickHandler : ICommandHandler
         {
             var memberSession = _server.FindSessionByNick(memberNick);
             if (memberSession != null)
-                await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.KICK, channelName, targetNick, reason);
+                await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.KICK, channelName, targetNick, reason);
         }
 
         // Remove target from channel

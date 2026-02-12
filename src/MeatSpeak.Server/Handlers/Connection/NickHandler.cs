@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server.Handlers.Connection;
 
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
@@ -66,7 +67,7 @@ public sealed class NickHandler : ICommandHandler
 
             // Broadcast to all users sharing a channel (deduplicated), plus the user themselves
             var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { session.Id };
-            await session.SendMessageAsync(prefix, IrcConstants.NICK, newNick);
+            await CapHelper.SendWithTimestamp(session, prefix, IrcConstants.NICK, newNick);
 
             foreach (var channelName in session.Info.Channels)
             {
@@ -85,7 +86,7 @@ public sealed class NickHandler : ICommandHandler
                     {
                         var memberSession = _server.FindSessionByNick(memberNick);
                         if (memberSession != null && notified.Add(memberSession.Id))
-                            await memberSession.SendMessageAsync(prefix, IrcConstants.NICK, newNick);
+                            await CapHelper.SendWithTimestamp(memberSession, prefix, IrcConstants.NICK, newNick);
                     }
                 }
             }

@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
@@ -59,9 +60,9 @@ public sealed class PartHandler : ICommandHandler
                 if (memberSession != null)
                 {
                     if (reason != null)
-                        await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PART, name, reason);
+                        await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.PART, name, reason);
                     else
-                        await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PART, name);
+                        await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.PART, name);
                 }
             }
 

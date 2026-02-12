@@ -5,6 +5,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
@@ -67,11 +68,15 @@ public sealed class PrivmsgHandler : ICommandHandler
                     continue;
                 var targetSession = _server.FindSessionByNick(nick);
                 if (targetSession != null)
-                    await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+                    await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
             }
             _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
             _metrics?.MessageBroadcast();
             _server.Events.Publish(new ChannelMessageEvent(session.Id, session.Info.Nickname!, target, text));
+
+            // echo-message: echo back to sender
+            if (CapHelper.HasCap(session, "echo-message"))
+                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
 
             LogMessage(session.Info.Nickname!, target, null, text, "PRIVMSG");
         }
@@ -85,7 +90,11 @@ public sealed class PrivmsgHandler : ICommandHandler
                     target, "No such nick/channel");
                 return;
             }
-            await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+
+            // echo-message: echo back to sender for private messages
+            if (CapHelper.HasCap(session, "echo-message"))
+                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
 
             // RPL_AWAY - notify sender if target is away
             if (targetSession.Info.AwayMessage != null)

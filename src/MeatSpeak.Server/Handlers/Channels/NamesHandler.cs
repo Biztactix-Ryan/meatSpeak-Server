@@ -26,7 +26,7 @@ public sealed class NamesHandler : ICommandHandler
 
                 if (_server.Channels.TryGetValue(name, out var channel))
                 {
-                    await JoinHandler.SendNamesReply(session, channel, _server.Config.ServerName);
+                    await JoinHandler.SendNamesReply(session, channel, _server.Config.ServerName, _server);
                 }
                 else
                 {
@@ -42,7 +42,7 @@ public sealed class NamesHandler : ICommandHandler
             {
                 if (channel.Modes.Contains('s') && !channel.IsMember(session.Info.Nickname!))
                     continue;
-                await JoinHandler.SendNamesReply(session, channel, _server.Config.ServerName);
+                await JoinHandler.SendNamesReply(session, channel, _server.Config.ServerName, _server);
             }
             await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_ENDOFNAMES,
                 "*", "End of /NAMES list");

@@ -45,6 +45,14 @@ public sealed class SessionImpl : ISession
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask SendTaggedMessageAsync(string? tags, string? prefix, string command, params string[] parameters)
+    {
+        Span<byte> buffer = stackalloc byte[IrcConstants.MaxLineLengthWithTags];
+        int written = MessageBuilder.WriteWithTags(buffer, tags, prefix, command, parameters);
+        _connection.Send(buffer[..written]);
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask SendNumericAsync(string serverName, int numeric, params string[] parameters)
     {
         Span<byte> buffer = stackalloc byte[IrcConstants.MaxLineLengthWithTags];

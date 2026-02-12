@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
@@ -89,7 +90,7 @@ public sealed class TopicHandler : ICommandHandler
         {
             var memberSession = _server.FindSessionByNick(memberNick);
             if (memberSession != null)
-                await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.TOPIC, channelName, newTopic);
+                await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.TOPIC, channelName, newTopic);
         }
 
         _server.Events.Publish(new TopicChangedEvent(channelName, newTopic, session.Info.Nickname!));

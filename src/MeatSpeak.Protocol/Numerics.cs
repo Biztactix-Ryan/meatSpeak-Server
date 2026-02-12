@@ -58,13 +58,24 @@ public static class Numerics
     // Oper
     public const int RPL_YOUREOPER = 381;
 
-    // Voice
-    public const int RPL_VOICESESSION = 900;
-    public const int RPL_VOICESTATE = 901;
-    public const int RPL_VOICELIST = 902;
-    public const int RPL_ENDOFVOICELIST = 903;
-    public const int RPL_VOICEKEY = 904;
-    public const int RPL_VOICEERROR = 905;
+    // SASL (IRCv3)
+    public const int RPL_LOGGEDIN = 900;
+    public const int RPL_LOGGEDOUT = 901;
+    public const int ERR_NICKLOCKED = 902;
+    public const int RPL_SASLSUCCESS = 903;
+    public const int ERR_SASLFAIL = 904;
+    public const int ERR_SASLTOOLONG = 905;
+    public const int ERR_SASLABORTED = 906;
+    public const int ERR_SASLALREADY = 907;
+    public const int RPL_SASLMECHS = 908;
+
+    // Voice (custom)
+    public const int RPL_VOICESESSION = 750;
+    public const int RPL_VOICESTATE = 751;
+    public const int RPL_VOICELIST = 752;
+    public const int RPL_ENDOFVOICELIST = 753;
+    public const int RPL_VOICEKEY = 754;
+    public const int RPL_VOICEERROR = 755;
 
     // Errors
     public const int ERR_NOSUCHNICK = 401;

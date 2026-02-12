@@ -392,6 +392,16 @@ var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
 var metrics = app.Services.GetRequiredService<ServerMetrics>();
 var writeQueue = app.Services.GetRequiredService<MeatSpeak.Server.Data.DbWriteQueue>();
 
+// IRCv3 capabilities
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("server-time"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("multi-prefix"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("echo-message"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("away-notify"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("userhost-in-names"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("extended-join"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("batch"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("sasl", "PLAIN"));
+
 // Connection handlers
 server.Commands.Register(new PingHandler());
 server.Commands.Register(new PongHandler());
@@ -432,8 +442,8 @@ server.Commands.Register(new RehashHandler(server));
 // Voice handler (stub)
 server.Commands.Register(new VoiceHandler());
 
-// Auth handler (stub)
-server.Commands.Register(new AuthenticateHandler());
+// Auth handler (SASL PLAIN)
+server.Commands.Register(new AuthenticateHandler(server));
 
 // Wire up middleware
 

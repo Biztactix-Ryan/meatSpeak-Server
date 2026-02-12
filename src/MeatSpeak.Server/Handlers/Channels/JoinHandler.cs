@@ -6,6 +6,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
@@ -45,7 +46,7 @@ public sealed class JoinHandler : ICommandHandler
                     {
                         var memberSession = _server.FindSessionByNick(memberNick);
                         if (memberSession != null)
-                            await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.PART, channelName);
+                            await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.PART, channelName);
                     }
                     ch.RemoveMember(session.Info.Nickname!);
                     if (ch.Members.Count == 0)
@@ -134,7 +135,12 @@ public sealed class JoinHandler : ICommandHandler
         {
             var memberSession = _server.FindSessionByNick(memberNick);
             if (memberSession != null)
-                await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.JOIN, name);
+            {
+                if (CapHelper.HasCap(memberSession, "extended-join"))
+                    await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.JOIN, name, session.Info.Account ?? "*", session.Info.Realname ?? "");
+                else
+                    await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.JOIN, name);
+            }
         }
         _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
 
@@ -156,7 +162,7 @@ public sealed class JoinHandler : ICommandHandler
         }
 
         // Send NAMES list
-        await SendNamesReply(session, channel, _server.Config.ServerName);
+        await SendNamesReply(session, channel, _server.Config.ServerName, _server);
 
         _server.Events.Publish(new ChannelJoinedEvent(session.Id, nick, name));
 
@@ -178,9 +184,23 @@ public sealed class JoinHandler : ICommandHandler
         }
     }
 
-    internal static async ValueTask SendNamesReply(ISession session, IChannel channel, string serverName)
+    internal static async ValueTask SendNamesReply(ISession session, IChannel channel, string serverName, IServer server)
     {
-        var names = string.Join(" ", channel.Members.Select(m => $"{m.Value.PrefixChar}{m.Key}"));
+        var multiPrefix = CapHelper.HasCap(session, "multi-prefix");
+        var userhostInNames = CapHelper.HasCap(session, "userhost-in-names");
+
+        var names = string.Join(" ", channel.Members.Select(m =>
+        {
+            var prefix = multiPrefix ? m.Value.AllPrefixChars : m.Value.PrefixChar;
+            if (userhostInNames)
+            {
+                var memberSession = server.FindSessionByNick(m.Key);
+                if (memberSession != null)
+                    return $"{prefix}{memberSession.Info.Nickname}!{memberSession.Info.Username}@{memberSession.Info.Hostname}";
+            }
+            return $"{prefix}{m.Key}";
+        }));
+
         await session.SendNumericAsync(serverName, Numerics.RPL_NAMREPLY,
             "=", channel.Name, names);
         await session.SendNumericAsync(serverName, Numerics.RPL_ENDOFNAMES,

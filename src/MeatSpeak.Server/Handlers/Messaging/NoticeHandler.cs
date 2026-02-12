@@ -4,6 +4,7 @@ using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
@@ -42,10 +43,13 @@ public sealed class NoticeHandler : ICommandHandler
                     continue;
                 var targetSession = _server.FindSessionByNick(nick);
                 if (targetSession != null)
-                    await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.NOTICE, target, text);
+                    await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.NOTICE, target, text);
             }
             _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
             _metrics?.MessageBroadcast();
+
+            if (CapHelper.HasCap(session, "echo-message"))
+                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.NOTICE, target, text);
 
             LogMessage(session.Info.Nickname!, target, null, text);
         }
@@ -53,7 +57,11 @@ public sealed class NoticeHandler : ICommandHandler
         {
             var targetSession = _server.FindSessionByNick(target);
             if (targetSession != null)
-                await targetSession.SendMessageAsync(session.Info.Prefix, IrcConstants.NOTICE, target, text);
+                await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+
+            if (CapHelper.HasCap(session, "echo-message"))
+                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+
             _metrics?.MessagePrivate();
 
             LogMessage(session.Info.Nickname!, null, target, text);

@@ -4,6 +4,7 @@ using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Diagnostics;
 using MeatSpeak.Server.State;
@@ -159,7 +160,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                             {
                                 var memberSession = _server.FindSessionByNick(memberNick);
                                 if (memberSession != null)
-                                    await memberSession.SendMessageAsync(session.Info.Prefix, IrcConstants.QUIT, quitReason);
+                                    await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.QUIT, quitReason);
                             }
                         }
 

@@ -13,6 +13,7 @@ public interface ISession
     ValueTask SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default);
     ValueTask SendLineAsync(string line, CancellationToken ct = default);
     ValueTask SendMessageAsync(string? prefix, string command, params string[] parameters);
+    ValueTask SendTaggedMessageAsync(string? tags, string? prefix, string command, params string[] parameters);
     ValueTask SendNumericAsync(string serverName, int numeric, params string[] parameters);
     ValueTask DisconnectAsync(string? reason = null);
 }

@@ -36,6 +36,25 @@ public static class MessageBuilder
     public static int Write(Span<byte> buffer, string? prefix, string command, params string[] parameters)
         => Write(buffer, prefix, command, parameters.AsSpan());
 
+    // Tag-aware overload
+    public static int WriteWithTags(Span<byte> buffer, string? tags, string? prefix, string command, ReadOnlySpan<string> parameters)
+    {
+        int pos = 0;
+
+        if (!string.IsNullOrEmpty(tags))
+        {
+            buffer[pos++] = IrcConstants.At;
+            pos += Encoding.UTF8.GetBytes(tags, buffer[pos..]);
+            buffer[pos++] = IrcConstants.Space;
+        }
+
+        pos += Write(buffer[pos..], prefix, command, parameters);
+        return pos;
+    }
+
+    public static int WriteWithTags(Span<byte> buffer, string? tags, string? prefix, string command, params string[] parameters)
+        => WriteWithTags(buffer, tags, prefix, command, parameters.AsSpan());
+
     // Overload that writes numeric as 3-digit string
     public static int WriteNumeric(Span<byte> buffer, string serverName, int numeric, string target, ReadOnlySpan<string> parameters)
     {
