@@ -54,6 +54,10 @@ jobs:
         if: always()
         run: kill $SERVER_PID 2>/dev/null || true
 
+      - name: Benchmark summary
+        if: always()
+        run: bash scripts/benchmark-summary.sh benchmark-results.json server-metrics.json "Smoke Test (100 users)"
+
       - name: Upload benchmark results
         if: always()
         uses: actions/upload-artifact@v4
