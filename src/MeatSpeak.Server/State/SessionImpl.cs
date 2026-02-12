@@ -11,8 +11,8 @@ public sealed class SessionImpl : ISession
 {
     private readonly IConnection _connection;
     private readonly string _serverName;
-    private readonly Channel<Func<Task>> _commandQueue = Channel.CreateBounded<Func<Task>>(
-        new BoundedChannelOptions(128) { FullMode = BoundedChannelFullMode.DropOldest });
+    private readonly Channel<Func<Task>> _commandQueue = Channel.CreateUnbounded<Func<Task>>(
+        new UnboundedChannelOptions { SingleReader = true });
 
     public string Id => _connection.Id;
     public SessionState State { get; set; } = SessionState.Connecting;

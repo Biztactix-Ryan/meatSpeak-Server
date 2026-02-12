@@ -174,10 +174,11 @@ builder.Services.AddSingleton<ServerMetrics>();
 // Benchmark mode — auto-shutdown when all clients disconnect
 if (benchmarkMode)
 {
-    // Disable flood protection and exempt localhost from connection limits
+    // Disable flood protection and all connection limits for benchmarking
     config.Flood.Enabled = false;
-    config.ExemptIps.Add("127.0.0.1");
-    config.ExemptIps.Add("::1");
+    config.MaxConnections = int.MaxValue;
+    config.MaxConnectionsPerIp = int.MaxValue;
+    config.RegistrationTimeout = 120;
 
     builder.Services.AddHostedService(sp => new BenchmarkService(
         sp.GetRequiredService<ServerMetrics>(),
