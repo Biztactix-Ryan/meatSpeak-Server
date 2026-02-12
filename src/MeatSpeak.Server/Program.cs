@@ -342,6 +342,9 @@ if (config.Tls.Enabled)
 // Hosted service for TCP
 builder.Services.AddHostedService<ServerHost>();
 
+// Ping timeout enforcement
+builder.Services.AddHostedService<PingTimeoutService>();
+
 var app = builder.Build();
 
 // Seed the database (creates tables + built-in roles if needed)

@@ -46,6 +46,7 @@ public sealed class ServerMetrics
     private long _messagesPrivateValue;
     private long _dbWritesValue;
     private long _errorsTotalValue;
+    private long _pingTimeoutsValue;
 
     public ServerMetrics()
     {
@@ -120,6 +121,13 @@ public sealed class ServerMetrics
         _errorsTotal.Add(1);
         Interlocked.Increment(ref _errorsTotalValue);
     }
+
+    public void PingTimeout()
+    {
+        Interlocked.Increment(ref _pingTimeoutsValue);
+    }
+
+    public long PingTimeouts => Interlocked.Read(ref _pingTimeoutsValue);
 
     // --- Histogram methods ---
 
