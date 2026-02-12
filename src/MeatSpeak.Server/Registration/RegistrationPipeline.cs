@@ -5,9 +5,11 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
+using MeatSpeak.Server.Data.Repositories;
 using MeatSpeak.Server.Diagnostics;
 using MeatSpeak.Server.Handlers.Connection;
 using MeatSpeak.Server.Numerics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 public sealed class RegistrationPipeline
@@ -15,14 +17,16 @@ public sealed class RegistrationPipeline
     private readonly IServer _server;
     private readonly NumericSender _numerics;
     private readonly DbWriteQueue? _writeQueue;
+    private readonly IServiceScopeFactory? _scopeFactory;
     private readonly ILogger<RegistrationPipeline> _logger;
     private readonly ServerMetrics _metrics;
 
-    public RegistrationPipeline(IServer server, NumericSender numerics, DbWriteQueue? writeQueue, ILogger<RegistrationPipeline> logger, ServerMetrics metrics)
+    public RegistrationPipeline(IServer server, NumericSender numerics, DbWriteQueue? writeQueue, IServiceScopeFactory? scopeFactory, ILogger<RegistrationPipeline> logger, ServerMetrics metrics)
     {
         _server = server;
         _numerics = numerics;
         _writeQueue = writeQueue;
+        _scopeFactory = scopeFactory;
         _logger = logger;
         _metrics = metrics;
     }
@@ -47,6 +51,29 @@ public sealed class RegistrationPipeline
                 "Password incorrect");
             await session.DisconnectAsync("Bad password");
             return;
+        }
+
+        // Check server-wide bans (K-lines)
+        if (_scopeFactory != null)
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var banRepo = scope.ServiceProvider.GetRequiredService<IBanRepository>();
+            var bans = await banRepo.GetAllActiveAsync();
+            var prefix = session.Info.Prefix;
+
+            foreach (var ban in bans)
+            {
+                if (IrcWildcard.Match(ban.Mask, prefix))
+                {
+                    var reason = string.IsNullOrEmpty(ban.Reason) ? "You are banned from this server" : ban.Reason;
+                    _logger.LogInformation("Session {Id} ({Prefix}) rejected: matches K-line {Mask}",
+                        session.Id, prefix, ban.Mask);
+                    await session.SendNumericAsync(_server.Config.ServerName, Protocol.Numerics.ERR_YOUREBANNEDCREEP,
+                        reason);
+                    await session.DisconnectAsync($"K-lined: {reason}");
+                    return;
+                }
+            }
         }
 
         session.State = SessionState.Registered;

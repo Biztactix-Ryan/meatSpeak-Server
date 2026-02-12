@@ -26,7 +26,7 @@ public class CapHandlerTests
         var capRegistry = new CapabilityRegistry();
         _server.Capabilities.Returns(capRegistry);
         var numerics = new NumericSender(_server);
-        var registration = new RegistrationPipeline(_server, numerics, null, NullLogger<RegistrationPipeline>.Instance, new ServerMetrics());
+        var registration = new RegistrationPipeline(_server, numerics, null, null, NullLogger<RegistrationPipeline>.Instance, new ServerMetrics());
         _handler = new CapHandler(_server, registration);
     }
 

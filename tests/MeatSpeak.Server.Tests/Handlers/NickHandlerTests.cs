@@ -28,7 +28,7 @@ public class NickHandlerTests
         _server.Events.Returns(Substitute.For<IEventBus>());
         _server.TryClaimNick(Arg.Any<string>(), Arg.Any<ISession>()).Returns(true);
         var numerics = new NumericSender(_server);
-        _registration = new RegistrationPipeline(_server, numerics, null, NullLogger<RegistrationPipeline>.Instance, new ServerMetrics());
+        _registration = new RegistrationPipeline(_server, numerics, null, null, NullLogger<RegistrationPipeline>.Instance, new ServerMetrics());
         _handler = new NickHandler(_server, _registration);
     }
 

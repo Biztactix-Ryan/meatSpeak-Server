@@ -106,6 +106,7 @@ public static class Numerics
     public const int ERR_NEEDMOREPARAMS = 461;
     public const int ERR_ALREADYREGISTRED = 462;
     public const int ERR_PASSWDMISMATCH = 464;
+    public const int ERR_YOUREBANNEDCREEP = 465;
     public const int ERR_CHANNELISFULL = 471;
     public const int ERR_INVITEONLYCHAN = 473;
     public const int ERR_BANNEDFROMCHAN = 474;

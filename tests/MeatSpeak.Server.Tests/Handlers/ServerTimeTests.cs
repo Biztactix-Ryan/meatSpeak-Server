@@ -206,7 +206,7 @@ public class ServerTimeTests
         var numerics = new NumericSender(_server);
         var logger = Substitute.For<ILogger<RegistrationPipeline>>();
         var metrics = new ServerMetrics();
-        var registration = new RegistrationPipeline(_server, numerics, null, logger, metrics);
+        var registration = new RegistrationPipeline(_server, numerics, null, null, logger, metrics);
         var handler = new NickHandler(_server, registration);
         var msg = new IrcMessage(null, null, "NICK", new[] { "NewNick" });
 
@@ -233,7 +233,7 @@ public class ServerTimeTests
         var numerics = new NumericSender(_server);
         var logger = Substitute.For<ILogger<RegistrationPipeline>>();
         var metrics = new ServerMetrics();
-        var registration = new RegistrationPipeline(_server, numerics, null, logger, metrics);
+        var registration = new RegistrationPipeline(_server, numerics, null, null, logger, metrics);
         var handler = new NickHandler(_server, registration);
         var msg = new IrcMessage(null, null, "NICK", new[] { "NewNick" });
 

@@ -54,7 +54,7 @@ public class FloodProtectionE2ETests : IDisposable
 
         var numerics = new NumericSender(_serverState);
         var registration = new RegistrationPipeline(
-            _serverState, numerics, null,
+            _serverState, numerics, null, null,
             NullLogger<RegistrationPipeline>.Instance, _metrics);
 
         // Register handlers
