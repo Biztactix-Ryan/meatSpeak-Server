@@ -19,9 +19,14 @@ public sealed class ChatLogEntityConfiguration : IEntityTypeConfiguration<ChatLo
         builder.Property(e => e.MessageType).HasMaxLength(16).IsRequired();
 
         builder.Property(e => e.SentAt).HasConversion(new DateTimeOffsetToBinaryConverter());
+        builder.Property(e => e.MsgId).HasMaxLength(64);
+        builder.Property(e => e.IsRedacted).HasDefaultValue(false);
+        builder.Property(e => e.RedactedBy).HasMaxLength(64);
+        builder.Property(e => e.RedactedAt).HasConversion(new DateTimeOffsetToBinaryConverter());
 
         builder.HasIndex(e => e.ChannelName);
         builder.HasIndex(e => e.Sender);
         builder.HasIndex(e => e.SentAt);
+        builder.HasIndex(e => e.MsgId).IsUnique().HasFilter(null);
     }
 }

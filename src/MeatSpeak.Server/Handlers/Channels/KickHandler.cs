@@ -5,15 +5,22 @@ using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
+using MeatSpeak.Server.Data;
+using MeatSpeak.Server.Data.Entities;
 
 [FloodPenalty(2)]
 public sealed class KickHandler : ICommandHandler
 {
     private readonly IServer _server;
+    private readonly DbWriteQueue? _writeQueue;
     public string Command => IrcConstants.KICK;
     public SessionState MinimumState => SessionState.Registered;
 
-    public KickHandler(IServer server) => _server = server;
+    public KickHandler(IServer server, DbWriteQueue? writeQueue = null)
+    {
+        _server = server;
+        _writeQueue = writeQueue;
+    }
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
@@ -65,6 +72,17 @@ public sealed class KickHandler : ICommandHandler
         var targetSession = _server.FindSessionByNick(targetNick);
         if (targetSession != null)
             targetSession.Info.Channels.Remove(channelName);
+
+        // Log KICK event for chathistory event-playback
+        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
+        {
+            ChannelName = channelName,
+            Sender = session.Info.Nickname!,
+            Message = $"{targetNick} {reason}",
+            MessageType = IrcConstants.KICK,
+            SentAt = DateTimeOffset.UtcNow,
+            MsgId = MeatSpeak.Server.Capabilities.MsgIdGenerator.Generate(),
+        }));
 
         if (channel.Members.Count == 0)
             _server.RemoveChannel(channelName);

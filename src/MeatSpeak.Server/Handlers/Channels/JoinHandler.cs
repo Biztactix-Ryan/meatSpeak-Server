@@ -167,6 +167,17 @@ public sealed class JoinHandler : ICommandHandler
 
         _server.Events.Publish(new ChannelJoinedEvent(session.Id, nick, name));
 
+        // Log JOIN event for chathistory event-playback
+        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
+        {
+            ChannelName = name,
+            Sender = nick,
+            Message = string.Empty,
+            MessageType = IrcConstants.JOIN,
+            SentAt = DateTimeOffset.UtcNow,
+            MsgId = Capabilities.MsgIdGenerator.Generate(),
+        }));
+
         // Persist new channel creation to database
         if (isNew)
         {

@@ -36,7 +36,8 @@ public sealed class TcpConnection : IConnection, IDisposable
         _id = Guid.NewGuid().ToString("N")[..12];
         RemoteEndPoint = socket.RemoteEndPoint;
 
-        _recvBuffer = BufferPool.Rent(4096);
+        // IRCv3 max line: 4096 (tags) + 512 (message) + 2 (CRLF) = 4610 bytes
+        _recvBuffer = BufferPool.Rent(4610);
         _recvArgs = new SocketAsyncEventArgs(unsafeSuppressExecutionContextFlow: true);
         _recvArgs.SetBuffer(_recvBuffer, 0, _recvBuffer.Length);
         _recvArgs.Completed += OnReceiveCompleted;

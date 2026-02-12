@@ -7,6 +7,8 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Diagnostics;
+using MeatSpeak.Server.Data;
+using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.State;
 using MeatSpeak.Server.Transport;
 using Microsoft.Extensions.Logging;
@@ -17,14 +19,16 @@ public sealed class IrcConnectionHandler : IConnectionHandler
     private readonly IServer _server;
     private readonly ILogger<IrcConnectionHandler> _logger;
     private readonly ServerMetrics _metrics;
+    private readonly DbWriteQueue? _writeQueue;
     private readonly Dictionary<string, SessionImpl> _connectionSessions = new();
     private readonly object _sessionsLock = new();
 
-    public IrcConnectionHandler(IServer server, ILogger<IrcConnectionHandler> logger, ServerMetrics metrics)
+    public IrcConnectionHandler(IServer server, ILogger<IrcConnectionHandler> logger, ServerMetrics metrics, DbWriteQueue? writeQueue = null)
     {
         _server = server;
         _logger = logger;
         _metrics = metrics;
+        _writeQueue = writeQueue;
     }
 
     public void OnConnected(IConnection connection)
@@ -62,6 +66,14 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         if (!IrcLine.TryParse(line, out var parts))
         {
             _logger.LogDebug("Failed to parse IRC line from {Id}", session.Id);
+            return;
+        }
+
+        // IRCv3 message-tags: client tag data MUST NOT exceed 4094 bytes
+        if (parts.Tags.Length > IrcConstants.MaxTagsLength - 2)
+        {
+            session.SendNumericAsync(_server.Config.ServerName, IrcNumerics.ERR_INPUTTOOLONG,
+                "Input line was too long").AsTask().Wait();
             return;
         }
 
@@ -201,6 +213,17 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                                     await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.QUIT, quitReason);
                             }
                         }
+
+                        // Log QUIT event per channel for chathistory event-playback
+                        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
+                        {
+                            ChannelName = channelName,
+                            Sender = nick!,
+                            Message = quitReason,
+                            MessageType = IrcConstants.QUIT,
+                            SentAt = DateTimeOffset.UtcNow,
+                            MsgId = MsgIdGenerator.Generate(),
+                        }));
 
                         channel.RemoveMember(nick!);
                         if (channel.Members.Count == 0)

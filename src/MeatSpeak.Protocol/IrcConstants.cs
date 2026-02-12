@@ -45,4 +45,7 @@ public static class IrcConstants
     public const string AWAY = "AWAY";
     public const string WHOWAS = "WHOWAS";
     public const string BATCH = "BATCH";
+    public const string TAGMSG = "TAGMSG";
+    public const string REDACT = "REDACT";
+    public const string CHATHISTORY = "CHATHISTORY";
 }

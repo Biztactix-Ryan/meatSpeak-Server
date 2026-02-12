@@ -44,6 +44,8 @@ public sealed class NumericSender
             "MODES=3",
             "EXCEPTS=e",
             "INVEX=I",
+            "MSGREFTYPES=timestamp,msgid",
+            "CHATHISTORY=100",
             "are supported by this server",
         };
         await session.SendNumericAsync(config.ServerName, Protocol.Numerics.RPL_ISUPPORT, tokens);

@@ -31,6 +31,8 @@ public sealed class NoticeHandler : ICommandHandler
 
         var target = message.GetParam(0)!;
         var text = message.GetParam(1)!;
+        var msgId = MsgIdGenerator.Generate();
+        var clientTags = CapHelper.ExtractClientTags(message.Tags);
 
         if (target.StartsWith('#'))
         {
@@ -44,32 +46,44 @@ public sealed class NoticeHandler : ICommandHandler
                     continue;
                 var targetSession = _server.FindSessionByNick(nick);
                 if (targetSession != null)
-                    await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+                {
+                    var extra = CapHelper.HasCap(targetSession, "message-tags") ? clientTags : null;
+                    await CapHelper.SendWithTagsAndExtra(targetSession, msgId, extra, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+                }
             }
             _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
             _metrics?.MessageBroadcast();
 
             if (CapHelper.HasCap(session, "echo-message"))
-                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            {
+                var extra = CapHelper.HasCap(session, "message-tags") ? clientTags : null;
+                await CapHelper.SendWithTagsAndExtra(session, msgId, extra, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            }
 
-            LogMessage(session.Info.Nickname!, target, null, text);
+            LogMessage(session.Info.Nickname!, target, null, text, msgId);
         }
         else
         {
             var targetSession = _server.FindSessionByNick(target);
             if (targetSession != null)
-                await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            {
+                var extra = CapHelper.HasCap(targetSession, "message-tags") ? clientTags : null;
+                await CapHelper.SendWithTagsAndExtra(targetSession, msgId, extra, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            }
 
             if (CapHelper.HasCap(session, "echo-message"))
-                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            {
+                var extra = CapHelper.HasCap(session, "message-tags") ? clientTags : null;
+                await CapHelper.SendWithTagsAndExtra(session, msgId, extra, session.Info.Prefix, IrcConstants.NOTICE, target, text);
+            }
 
             _metrics?.MessagePrivate();
 
-            LogMessage(session.Info.Nickname!, null, target, text);
+            LogMessage(session.Info.Nickname!, null, target, text, msgId);
         }
     }
 
-    private void LogMessage(string sender, string? channel, string? target, string text)
+    private void LogMessage(string sender, string? channel, string? target, string text, string msgId)
     {
         _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
         {
@@ -79,6 +93,7 @@ public sealed class NoticeHandler : ICommandHandler
             Message = text,
             MessageType = "NOTICE",
             SentAt = DateTimeOffset.UtcNow,
+            MsgId = msgId,
         }));
     }
 }

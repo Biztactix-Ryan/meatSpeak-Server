@@ -15,6 +15,7 @@ public class MeatSpeakDbContext : DbContext
     public DbSet<TopicHistoryEntity> TopicHistory => Set<TopicHistoryEntity>();
     public DbSet<UserHistoryEntity> UserHistory => Set<UserHistoryEntity>();
     public DbSet<ChatLogEntity> ChatLogs => Set<ChatLogEntity>();
+    public DbSet<ReactionEntity> Reactions => Set<ReactionEntity>();
 
     public MeatSpeakDbContext(DbContextOptions<MeatSpeakDbContext> options) : base(options) { }
 
@@ -29,5 +30,6 @@ public class MeatSpeakDbContext : DbContext
         modelBuilder.ApplyConfiguration(new TopicHistoryEntityConfiguration());
         modelBuilder.ApplyConfiguration(new UserHistoryEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChatLogEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ReactionEntityConfiguration());
     }
 }

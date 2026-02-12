@@ -27,6 +27,7 @@ using MeatSpeak.Server.Handlers.ServerInfo;
 using MeatSpeak.Server.Handlers.Operator;
 using MeatSpeak.Server.Handlers.Voice;
 using MeatSpeak.Server.Handlers.Auth;
+using MeatSpeak.Server.Handlers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -407,6 +408,10 @@ server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability(
 server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("extended-join"));
 server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("batch"));
 server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("sasl", "PLAIN"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("message-tags"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("draft/chathistory"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("draft/message-redaction"));
+server.Capabilities.Register(new MeatSpeak.Server.Capabilities.SimpleCapability("draft/event-playback"));
 
 // Connection handlers
 server.Commands.Register(new PingHandler());
@@ -421,13 +426,16 @@ server.Commands.Register(new AwayHandler(server));
 // Messaging handlers
 server.Commands.Register(new PrivmsgHandler(server, writeQueue, metrics));
 server.Commands.Register(new NoticeHandler(server, writeQueue, metrics));
+server.Commands.Register(new TagmsgHandler(server));
+server.Commands.Register(new RedactHandler(server, writeQueue, scopeFactory));
+server.Commands.Register(new ChatHistoryHandler(server, scopeFactory));
 
 // Channel handlers
 server.Commands.Register(new JoinHandler(server, writeQueue, metrics));
 server.Commands.Register(new PartHandler(server, writeQueue));
 server.Commands.Register(new ModeHandler(server));
 server.Commands.Register(new TopicHandler(server, writeQueue));
-server.Commands.Register(new KickHandler(server));
+server.Commands.Register(new KickHandler(server, writeQueue));
 server.Commands.Register(new NamesHandler(server));
 server.Commands.Register(new ListHandler(server));
 server.Commands.Register(new InviteHandler(server));

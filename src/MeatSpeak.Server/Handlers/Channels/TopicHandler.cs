@@ -96,6 +96,17 @@ public sealed class TopicHandler : ICommandHandler
 
         _server.Events.Publish(new TopicChangedEvent(channelName, newTopic, session.Info.Nickname!));
 
+        // Log TOPIC event for chathistory event-playback
+        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
+        {
+            ChannelName = channelName,
+            Sender = session.Info.Nickname!,
+            Message = newTopic,
+            MessageType = IrcConstants.TOPIC,
+            SentAt = DateTimeOffset.UtcNow,
+            MsgId = Capabilities.MsgIdGenerator.Generate(),
+        }));
+
         // Persist topic change to database
         if (_writeQueue != null)
         {

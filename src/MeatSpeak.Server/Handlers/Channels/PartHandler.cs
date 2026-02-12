@@ -7,6 +7,7 @@ using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Data;
+using MeatSpeak.Server.Data.Entities;
 
 public sealed class PartHandler : ICommandHandler
 {
@@ -74,6 +75,17 @@ public sealed class PartHandler : ICommandHandler
                 _server.RemoveChannel(name);
 
             _server.Events.Publish(new ChannelPartedEvent(session.Id, session.Info.Nickname!, name, reason));
+
+            // Log PART event for chathistory event-playback
+            _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
+            {
+                ChannelName = name,
+                Sender = session.Info.Nickname!,
+                Message = reason ?? string.Empty,
+                MessageType = IrcConstants.PART,
+                SentAt = DateTimeOffset.UtcNow,
+                MsgId = Capabilities.MsgIdGenerator.Generate(),
+            }));
 
             // Delete channel from database when it becomes empty
             if (channelRemoved)

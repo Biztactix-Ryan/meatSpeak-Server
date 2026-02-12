@@ -129,6 +129,17 @@ public sealed class DbWriteService : BackgroundService
                 case AddTopicHistory th:
                     db.TopicHistory.Add(th.Entity);
                     break;
+
+                case RedactChatLog redact:
+                    var chatEntry = await db.ChatLogs
+                        .FirstOrDefaultAsync(e => e.MsgId == redact.MsgId, ct);
+                    if (chatEntry != null)
+                    {
+                        chatEntry.IsRedacted = true;
+                        chatEntry.RedactedBy = redact.RedactedBy;
+                        chatEntry.RedactedAt = DateTimeOffset.UtcNow;
+                    }
+                    break;
             }
         }
 

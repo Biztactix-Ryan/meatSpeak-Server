@@ -87,6 +87,7 @@ public static class Numerics
     public const int ERR_NOORIGIN = 409;
     public const int ERR_NORECIPIENT = 411;
     public const int ERR_NOTEXTTOSEND = 412;
+    public const int ERR_INPUTTOOLONG = 417;
     public const int ERR_UNKNOWNCOMMAND = 421;
     public const int ERR_NONICKNAMEGIVEN = 431;
     public const int ERR_ERRONEUSNICKNAME = 432;

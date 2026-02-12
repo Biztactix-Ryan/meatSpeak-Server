@@ -11,6 +11,7 @@ public sealed record UpdateUserDisconnect(string Nickname, DateTimeOffset Discon
 public sealed record UpsertChannel(ChannelEntity Entity) : DbWriteItem;
 public sealed record DeleteChannel(string Name) : DbWriteItem;
 public sealed record AddTopicHistory(TopicHistoryEntity Entity) : DbWriteItem;
+public sealed record RedactChatLog(string MsgId, string RedactedBy) : DbWriteItem;
 
 public sealed class DbWriteQueue
 {

@@ -9,4 +9,8 @@ public sealed class ChatLogEntity
     public string Message { get; set; } = string.Empty;
     public string MessageType { get; set; } = "PRIVMSG";
     public DateTimeOffset SentAt { get; set; } = DateTimeOffset.UtcNow;
+    public string? MsgId { get; set; }
+    public bool IsRedacted { get; set; }
+    public string? RedactedBy { get; set; }
+    public DateTimeOffset? RedactedAt { get; set; }
 }

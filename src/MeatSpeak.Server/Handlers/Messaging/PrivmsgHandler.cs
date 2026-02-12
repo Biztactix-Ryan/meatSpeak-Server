@@ -44,6 +44,8 @@ public sealed class PrivmsgHandler : ICommandHandler
 
         var target = message.GetParam(0)!;
         var text = message.GetParam(1)!;
+        var msgId = MsgIdGenerator.Generate();
+        var clientTags = CapHelper.ExtractClientTags(message.Tags);
 
         if (target.StartsWith('#'))
         {
@@ -69,7 +71,10 @@ public sealed class PrivmsgHandler : ICommandHandler
                     continue;
                 var targetSession = _server.FindSessionByNick(nick);
                 if (targetSession != null)
-                    await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+                {
+                    var extra = CapHelper.HasCap(targetSession, "message-tags") ? clientTags : null;
+                    await CapHelper.SendWithTagsAndExtra(targetSession, msgId, extra, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+                }
             }
             _metrics?.RecordBroadcastDuration(ServerMetrics.GetElapsedMs(broadcastStart));
             _metrics?.MessageBroadcast();
@@ -77,9 +82,12 @@ public sealed class PrivmsgHandler : ICommandHandler
 
             // echo-message: echo back to sender
             if (CapHelper.HasCap(session, "echo-message"))
-                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            {
+                var extra = CapHelper.HasCap(session, "message-tags") ? clientTags : null;
+                await CapHelper.SendWithTagsAndExtra(session, msgId, extra, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            }
 
-            LogMessage(session.Info.Nickname!, target, null, text, "PRIVMSG");
+            LogMessage(session.Info.Nickname!, target, null, text, "PRIVMSG", msgId);
         }
         else
         {
@@ -91,11 +99,17 @@ public sealed class PrivmsgHandler : ICommandHandler
                     target, "No such nick/channel");
                 return;
             }
-            await CapHelper.SendWithTimestamp(targetSession, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            {
+                var extra = CapHelper.HasCap(targetSession, "message-tags") ? clientTags : null;
+                await CapHelper.SendWithTagsAndExtra(targetSession, msgId, extra, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            }
 
             // echo-message: echo back to sender for private messages
             if (CapHelper.HasCap(session, "echo-message"))
-                await CapHelper.SendWithTimestamp(session, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            {
+                var extra = CapHelper.HasCap(session, "message-tags") ? clientTags : null;
+                await CapHelper.SendWithTagsAndExtra(session, msgId, extra, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
+            }
 
             // RPL_AWAY - notify sender if target is away
             if (targetSession.Info.AwayMessage != null)
@@ -107,11 +121,11 @@ public sealed class PrivmsgHandler : ICommandHandler
             _metrics?.MessagePrivate();
             _server.Events.Publish(new PrivateMessageEvent(session.Id, session.Info.Nickname!, target, text));
 
-            LogMessage(session.Info.Nickname!, null, target, text, "PRIVMSG");
+            LogMessage(session.Info.Nickname!, null, target, text, "PRIVMSG", msgId);
         }
     }
 
-    private void LogMessage(string sender, string? channel, string? target, string text, string type)
+    private void LogMessage(string sender, string? channel, string? target, string text, string type, string msgId)
     {
         _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
         {
@@ -121,6 +135,7 @@ public sealed class PrivmsgHandler : ICommandHandler
             Message = text,
             MessageType = type,
             SentAt = DateTimeOffset.UtcNow,
+            MsgId = msgId,
         }));
     }
 }
