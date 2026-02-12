@@ -1,87 +1,134 @@
-# meatSpeak
+<p align="center">
+  <img src="meatSpeakLogo.png" alt="meatSpeak logo" width="200">
+</p>
 
-A modern IRC server with an integrated voice SFU (Selective Forwarding Unit), built in C# on .NET 9. meatSpeak combines traditional IRC text communication with real-time voice channels, offering a self-hostable communication platform that speaks a protocol people already know.
+<div align="center">
 
-## What is this?
+$${\color{red}\Huge\textsf{meat}}{\Huge\textsf{Speak}}$$
 
-meatSpeak is an IRC server that extends the familiar IRC protocol with voice support. Instead of bolting a proprietary protocol onto a chat server, it builds on top of RFC 1459 and adds voice as a first-class feature alongside text channels, direct messaging, and all the IRC commands you'd expect.
+</div>
 
-The voice system uses a Selective Forwarding Unit architecture — the server receives voice packets from participants and selectively forwards them to other members of the voice channel, rather than mixing audio server-side. This keeps latency low and allows features like end-to-end encryption, spatial audio, and per-stream priority without the server needing to decode anything.
+<p align="center"><strong>Free, open-source communication server — IRC with voice</strong></p>
 
-## What we're trying to do
+---
 
-The goal is to build a communication server that:
+meatSpeak is a self-hostable communication server that extends the IRC protocol with voice channels, modern permissions, and end-to-end encryption. It's a free, open alternative to Discord and Slack — built on IRCv3 so that hundreds of existing clients already work out of the box. Compiles to a single binary you can drop on any machine and run.
 
-- **Uses an open, well-understood protocol** — IRC has decades of client support. Any IRC client can connect for text chat. Voice-capable clients get the full experience.
-- **Gives you ownership of your infrastructure** — no SaaS dependency, no telemetry, no account requirements beyond what you configure. Run it on your own hardware.
-- **Treats voice as a peer to text** — voice channels live alongside text channels with the same permissions model, the same admin tools, and the same server.
-- **Performs well without bloat** — zero-allocation protocol parsing, object pooling, async I/O throughout. Designed to handle real load on modest hardware.
+## Why meatSpeak?
 
-This is currently an **initial scaffold**. The architecture and all major subsystems are in place, with many command handlers stubbed out and ready for implementation.
+Discord, Slack, and Teams use proprietary protocols, can't be self-hosted, and give you no ownership of your data. If the service shuts down or changes terms, you lose everything.
+
+meatSpeak builds on **IRCv3** — an open standard with decades of client support. Any IRCv3 client can connect for text chat today. Voice-capable clients get the full experience with low-latency audio and encrypted channels.
+
+**Your server, your data, your rules.** No SaaS dependency, no telemetry, no forced accounts, no ads. Run it on your own hardware or a $5/month VPS.
+
+## Features
+
+- **Full IRCv3 server** — 37 command handlers, CAP negotiation, SASL authentication, server-time, message-tags, echo-message, chat history, message redaction, and more
+- **Voice chat** — SFU (Selective Forwarding Unit) architecture for low-latency audio without server-side mixing
+- **E2E encryption** — XChaCha20-Poly1305 for voice traffic, designed for privacy from the ground up
+- **Discord-style permissions** — Bitfield role system with hierarchical roles and per-channel overrides
+- **Persistence** — SQLite (works out of the box), PostgreSQL, or MariaDB — chat history, audit logs, user accounts
+- **Admin API** — JSON-RPC 2.0 with a web dashboard at `/admin`, secured with Argon2id-hashed API keys
+- **TLS support** — IRC over TLS, WebSocket over TLS
+- **WebSocket transport** — Browser-based clients via `ws://` and `wss://`
+- **Performance** — Zero-allocation protocol parsing, object pooling, async I/O throughout — handles thousands of concurrent connections on modest hardware
+- **994 tests** across 8 test projects
+
+## Quick Start
+
+Download a release binary or build one yourself:
+
+```bash
+# Build a self-contained single-file binary
+dotnet publish src/MeatSpeak.Server -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
+
+# The binary lands in src/MeatSpeak.Server/bin/Release/net9.0/linux-x64/publish/
+```
+
+Edit `src/MeatSpeak.Server/Config/server-config.json` if needed (defaults work fine), then run:
+
+```bash
+./MeatSpeak.Server
+```
+
+Connect with any IRC client pointed at `localhost:6667`.
+
+## Building from Source
+
+```bash
+# Build everything
+dotnet build MeatSpeak.Server.sln
+
+# Run all tests
+dotnet test MeatSpeak.Server.sln --verbosity minimal
+
+# Publish single-file binary (replace linux-x64 with your platform)
+dotnet publish src/MeatSpeak.Server -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
+```
+
+Other runtime identifiers: `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`
+
+## Configuration
+
+Default ports:
+
+| Port | Protocol |
+|------|----------|
+| 6667 | IRC (TCP) |
+| 6697 | IRC (TLS) |
+| 6668 | Voice (UDP) |
+| 6669 | WebSocket IRC |
+| 443  | WebSocket IRC (TLS) |
+| 6670 | Admin API + web dashboard |
+
+All configuration lives in `src/MeatSpeak.Server/Config/server-config.json`. The default SQLite database requires no setup — just run the binary.
+
+Database options: **SQLite** (default, zero-config), **PostgreSQL**, **MariaDB**.
+
+## Compatible Clients
+
+Any IRCv3-compatible client works for text chat:
+
+- [irssi](https://irssi.org/)
+- [WeeChat](https://weechat.org/)
+- [HexChat](https://hexchat.github.io/)
+- [The Lounge](https://thelounge.chat/) (web-based)
+- [Kiwi IRC](https://kiwiirc.com/) (web-based)
+- [Revolution IRC](https://github.com/niccokunzmann/revolution-irc) (Android)
+
+Voice requires a meatSpeak-aware client (coming soon).
+
+## Roadmap
+
+- **Server discovery** — directory for finding public meatSpeak servers (in progress)
+- **IRCv3 voice extensions** — proposing voice protocol extensions to the IRCv3 specification
+- **Native clients** — desktop and mobile apps with full voice support
+- **Federation** — server-to-server linking
 
 ## Architecture
 
 The server is split into focused projects:
 
 | Project | Role |
-|---|---|
-| `MeatSpeak.Protocol` | Zero-alloc IRC line parser, message builder, voice packet format (13-byte header) |
-| `MeatSpeak.Server.Core` | Interfaces, registries (commands, modes, capabilities), event bus |
-| `MeatSpeak.Server.Transport` | TCP server, UDP listener/sender, line framing, socket/buffer pooling |
-| `MeatSpeak.Server.Permissions` | Bitfield-based permission system — 16 server-level and 16 channel-level flags, role hierarchy |
-| `MeatSpeak.Server.Data` | Entity Framework Core persistence — PostgreSQL and MariaDB support, repositories, audit logging |
-| `MeatSpeak.Server.Voice` | SFU router, SSRC management, voice sessions/channels, transport encryption (libsodium), silence detection |
-| `MeatSpeak.Server.AdminApi` | JSON-RPC 2.0 admin interface with API key auth, HTTP and WebSocket transports |
-| `MeatSpeak.Server` | Main application — connection handler, registration pipeline, all IRC command handlers, server state |
+|---------|------|
+| `MeatSpeak.Protocol` | Zero-alloc IRC parser + message builder, voice packet format |
+| `MeatSpeak.Server.Core` | Interfaces, registries, event bus, config, flood limiter |
+| `MeatSpeak.Server.Transport` | TCP, TLS, WebSocket, and UDP transports with connection pooling |
+| `MeatSpeak.Server.Permissions` | Bitfield permission system with role hierarchy and channel overrides |
+| `MeatSpeak.Server.Data` | EF Core persistence, repositories, background write queue |
+| `MeatSpeak.Server.Voice` | SFU voice router, SSRC management, encryption |
+| `MeatSpeak.Server.AdminApi` | JSON-RPC 2.0 admin API with API key auth |
+| `MeatSpeak.Server` | Main application — IRC handlers, server host, DI wiring |
 
-## Current status
+For detailed architecture documentation, see [CLAUDE.md](CLAUDE.md).
 
-**Working:**
-- TCP server with async connection handling
-- IRC registration flow (NICK/USER/CAP negotiation)
-- PING/PONG keepalive
-- PRIVMSG and NOTICE
-- Permission system with role hierarchy and per-channel overrides
-- Voice infrastructure (UDP transport, SFU routing, SSRC management, encryption)
-- Admin API framework (JSON-RPC 2.0, API key auth)
-- Database layer (PostgreSQL/MariaDB, EF Core repositories, audit log)
-- MOTD, LUSERS, VERSION, ISUPPORT
-- 112 passing tests across all subsystems
+## Contributing
 
-**Stubbed / In Progress:**
-- Channel operations (JOIN, PART, KICK, MODE, TOPIC, NAMES, LIST, INVITE)
-- Voice join/leave flow and VOICE command
-- SASL authentication
-- Admin API method implementations
-- WHO/WHOIS queries
-- Operator commands (OPER, KILL, REHASH)
+Contributions are welcome! Check the [issues](../../issues) for open tasks or file a new one.
 
-## Configuration
+meatSpeak is licensed under the **GNU Affero General Public License v3.0** — any modifications to the server must be shared under the same terms, even when running as a network service.
 
-Default config lives at `src/MeatSpeak.Server/Config/server-config.json`:
+## License
 
-- **IRC (TCP):** `0.0.0.0:6667`
-- **Voice (UDP):** `0.0.0.0:6668`
-- **Admin API:** port `6670`
-- **Max connections:** 1024
-- **Database:** PostgreSQL or MariaDB
-
-## Building
-
-```
-dotnet build MeatSpeak.Server.sln
-```
-
-## Running tests
-
-```
-dotnet test MeatSpeak.Server.sln
-```
-
-## Tech stack
-
-- C# 12 / .NET 9
-- Entity Framework Core 9 (PostgreSQL via Npgsql, MariaDB via Pomelo)
-- Sodium.Core (libsodium) for voice encryption
-- Microsoft.Extensions.Hosting for DI and lifecycle
-- xUnit for testing
+[AGPLv3](LICENSE) — see the [LICENSE](LICENSE) file for the full text.
