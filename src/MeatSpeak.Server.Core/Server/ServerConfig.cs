@@ -48,6 +48,14 @@ public sealed class AdminApiKeyEntry
     public List<string>? AllowedMethods { get; set; }
 }
 
+public sealed class FloodConfig
+{
+    public bool Enabled { get; set; } = true;
+    public int BurstLimit { get; set; } = 5;
+    public double TokenIntervalSeconds { get; set; } = 2.0;
+    public int ExcessFloodThreshold { get; set; } = 20;
+}
+
 public sealed class ServerConfig
 {
     public string ServerName { get; set; } = "meatspeak.local";
@@ -72,4 +80,5 @@ public sealed class ServerConfig
     public DatabaseConfig Database { get; set; } = new();
     public TlsConfig Tls { get; set; } = new();
     public AdminApiConfig AdminApi { get; set; } = new();
+    public FloodConfig Flood { get; set; } = new();
 }

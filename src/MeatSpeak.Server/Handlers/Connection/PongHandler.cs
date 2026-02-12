@@ -4,6 +4,7 @@ using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 
+[FloodPenalty(0)]
 public sealed class PongHandler : ICommandHandler
 {
     public string Command => IrcConstants.PONG;

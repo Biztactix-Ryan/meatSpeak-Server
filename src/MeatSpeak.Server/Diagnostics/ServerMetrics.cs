@@ -47,6 +47,8 @@ public sealed class ServerMetrics
     private long _dbWritesValue;
     private long _errorsTotalValue;
     private long _pingTimeoutsValue;
+    private long _commandsThrottledValue;
+    private long _excessFloodDisconnectsValue;
 
     public ServerMetrics()
     {
@@ -129,6 +131,20 @@ public sealed class ServerMetrics
 
     public long PingTimeouts => Interlocked.Read(ref _pingTimeoutsValue);
 
+    public void CommandThrottled()
+    {
+        Interlocked.Increment(ref _commandsThrottledValue);
+    }
+
+    public long CommandsThrottled => Interlocked.Read(ref _commandsThrottledValue);
+
+    public void ExcessFloodDisconnect()
+    {
+        Interlocked.Increment(ref _excessFloodDisconnectsValue);
+    }
+
+    public long ExcessFloodDisconnects => Interlocked.Read(ref _excessFloodDisconnectsValue);
+
     // --- Histogram methods ---
 
     public void RecordRegistrationDuration(double ms)
@@ -185,6 +201,8 @@ public sealed class ServerMetrics
             MessagesPrivate = Interlocked.Read(ref _messagesPrivateValue),
             DbWrites = Interlocked.Read(ref _dbWritesValue),
             ErrorsTotal = Interlocked.Read(ref _errorsTotalValue),
+            CommandsThrottled = Interlocked.Read(ref _commandsThrottledValue),
+            ExcessFloodDisconnects = Interlocked.Read(ref _excessFloodDisconnectsValue),
             RegistrationDuration = _registrationDurationTracker.GetSnapshot(),
             CommandDuration = commandHistograms,
             BroadcastDuration = _broadcastDurationTracker.GetSnapshot(),
@@ -293,6 +311,8 @@ public sealed class MetricsSnapshot
     public long MessagesPrivate { get; init; }
     public long DbWrites { get; init; }
     public long ErrorsTotal { get; init; }
+    public long CommandsThrottled { get; init; }
+    public long ExcessFloodDisconnects { get; init; }
     public HistogramSnapshot RegistrationDuration { get; init; } = new();
     public Dictionary<string, HistogramSnapshot> CommandDuration { get; init; } = new();
     public HistogramSnapshot BroadcastDuration { get; init; } = new();

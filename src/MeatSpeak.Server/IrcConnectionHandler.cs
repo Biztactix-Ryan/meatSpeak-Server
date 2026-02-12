@@ -32,6 +32,14 @@ public sealed class IrcConnectionHandler : IConnectionHandler
         var session = new SessionImpl(connection, _server.Config.ServerName);
         lock (_sessionsLock)
             _connectionSessions[connection.Id] = session;
+        var floodConfig = _server.Config.Flood;
+        if (floodConfig.Enabled)
+        {
+            session.Info.FloodLimiter = new FloodLimiter(
+                floodConfig.BurstLimit,
+                floodConfig.TokenIntervalSeconds,
+                floodConfig.ExcessFloodThreshold);
+        }
         _server.AddSession(session);
         _metrics.ConnectionAccepted();
         _metrics.ConnectionActive();
@@ -47,6 +55,9 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             if (!_connectionSessions.TryGetValue(connection.Id, out session))
                 return;
         }
+
+        if (session.State == SessionState.Disconnecting)
+            return;
 
         if (!IrcLine.TryParse(line, out var parts))
         {
@@ -89,6 +100,33 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 session.SendNumericAsync(_server.Config.ServerName, IrcNumerics.ERR_NOPRIVILEGES,
                     "Permission Denied").AsTask().Wait();
                 return;
+            }
+        }
+
+        // Flood protection
+        var limiter = session.Info.FloodLimiter;
+        if (limiter != null &&
+            !Permissions.PermissionResolution.HasServerPermission(session.CachedServerPermissions, Permissions.ServerPermission.BypassThrottle))
+        {
+            var penaltyAttr = handlerType.GetCustomAttributes(typeof(FloodPenaltyAttribute), false);
+            var cost = penaltyAttr.Length > 0 ? ((FloodPenaltyAttribute)penaltyAttr[0]).Cost : 1;
+
+            if (cost > 0)
+            {
+                var floodResult = limiter.TryConsume(cost);
+                if (floodResult == FloodResult.ExcessFlood)
+                {
+                    _logger.LogWarning("Excess flood from {Id}, disconnecting", session.Id);
+                    _metrics.ExcessFloodDisconnect();
+                    session.DisconnectAsync("Excess Flood").AsTask().Wait();
+                    return;
+                }
+                if (floodResult == FloodResult.Throttled)
+                {
+                    _logger.LogDebug("Throttled {Command} from {Id}", commandStr, session.Id);
+                    _metrics.CommandThrottled();
+                    return;
+                }
             }
         }
 

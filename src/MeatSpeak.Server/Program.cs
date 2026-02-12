@@ -172,6 +172,9 @@ builder.Services.AddSingleton<ServerMetrics>();
 // Benchmark mode — auto-shutdown when all clients disconnect
 if (benchmarkMode)
 {
+    // Disable flood protection so benchmark clients aren't throttled
+    config.Flood.Enabled = false;
+
     builder.Services.AddHostedService(sp => new BenchmarkService(
         sp.GetRequiredService<ServerMetrics>(),
         sp.GetRequiredService<IHostApplicationLifetime>(),

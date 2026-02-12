@@ -10,6 +10,7 @@ using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
 
+[FloodPenalty(2)]
 public sealed class PrivmsgHandler : ICommandHandler
 {
     private readonly IServer _server;

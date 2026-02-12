@@ -104,6 +104,8 @@ public sealed class BenchmarkService : IHostedService
                 messages_private = snapshot.MessagesPrivate,
                 db_writes = snapshot.DbWrites,
                 errors_total = snapshot.ErrorsTotal,
+                commands_throttled = snapshot.CommandsThrottled,
+                excess_flood_disconnects = snapshot.ExcessFloodDisconnects,
             },
             histograms = new
             {
@@ -148,6 +150,8 @@ public sealed class BenchmarkService : IHostedService
         _logger.LogInformation("  Messages broadcast:   {V}", s.MessagesBroadcast);
         _logger.LogInformation("  Messages private:     {V}", s.MessagesPrivate);
         _logger.LogInformation("  Errors:               {V}", s.ErrorsTotal);
+        _logger.LogInformation("  Commands throttled:   {V}", s.CommandsThrottled);
+        _logger.LogInformation("  Excess flood d/c:     {V}", s.ExcessFloodDisconnects);
         if (s.RegistrationDuration.Count > 0)
             _logger.LogInformation("  Registration p50/p99: {P50:F1}ms / {P99:F1}ms",
                 s.RegistrationDuration.P50, s.RegistrationDuration.P99);

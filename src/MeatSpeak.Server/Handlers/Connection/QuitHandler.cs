@@ -5,6 +5,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Data;
 
+[FloodPenalty(0)]
 public sealed class QuitHandler : ICommandHandler
 {
     private readonly DbWriteQueue? _writeQueue;

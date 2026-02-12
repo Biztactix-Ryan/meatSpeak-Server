@@ -9,6 +9,7 @@ using MeatSpeak.Server.Core.Modes;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 
+[FloodPenalty(2)]
 public sealed class ModeHandler : ICommandHandler
 {
     private readonly IServer _server;

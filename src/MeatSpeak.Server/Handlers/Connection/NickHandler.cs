@@ -8,6 +8,7 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Registration;
 
+[FloodPenalty(2)]
 public sealed class NickHandler : ICommandHandler
 {
     private readonly IServer _server;

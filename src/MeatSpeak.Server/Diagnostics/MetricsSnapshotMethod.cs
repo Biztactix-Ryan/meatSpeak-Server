@@ -25,6 +25,8 @@ public sealed class MetricsSnapshotMethod : IAdminMethod
                 messages_private = snapshot.MessagesPrivate,
                 db_writes = snapshot.DbWrites,
                 errors_total = snapshot.ErrorsTotal,
+                commands_throttled = snapshot.CommandsThrottled,
+                excess_flood_disconnects = snapshot.ExcessFloodDisconnects,
             },
             histograms = new
             {

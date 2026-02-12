@@ -9,6 +9,7 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Data;
 using MeatSpeak.Server.Data.Entities;
 
+[FloodPenalty(2)]
 public sealed class TopicHandler : ICommandHandler
 {
     private readonly IServer _server;

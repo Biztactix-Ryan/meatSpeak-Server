@@ -6,6 +6,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 
+[FloodPenalty(2)]
 public sealed class KickHandler : ICommandHandler
 {
     private readonly IServer _server;
