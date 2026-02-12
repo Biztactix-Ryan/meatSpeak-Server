@@ -39,6 +39,16 @@ public sealed class RegistrationPipeline
         if (session.Info.CapState.InNegotiation && !session.Info.CapState.NegotiationComplete)
             return;
 
+        // Validate server password if configured
+        var requiredPass = _server.Config.ServerPassword;
+        if (!string.IsNullOrEmpty(requiredPass) && session.Info.ServerPassword != requiredPass)
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Protocol.Numerics.ERR_PASSWDMISMATCH,
+                "Password incorrect");
+            await session.DisconnectAsync("Bad password");
+            return;
+        }
+
         session.State = SessionState.Registered;
         _logger.LogInformation("Session {Id} registered as {Nick}", session.Id, session.Info.Nickname);
 

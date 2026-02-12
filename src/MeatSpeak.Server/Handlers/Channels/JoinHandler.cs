@@ -74,6 +74,14 @@ public sealed class JoinHandler : ICommandHandler
                 continue;
             }
 
+            // Check per-user channel limit
+            if (session.Info.Channels.Count >= _server.Config.MaxChannelsPerUser)
+            {
+                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_TOOMANYCHANNELS,
+                    name, "You have joined too many channels");
+                return;
+            }
+
             var key = i < keys.Length ? keys[i] : null;
             await JoinChannel(session, name, key);
         }

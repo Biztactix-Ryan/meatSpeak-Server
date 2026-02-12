@@ -15,12 +15,12 @@ public sealed class TcpConnection : IConnection, IDisposable
     private readonly SocketEventArgsPool _sendPool;
     private readonly byte[] _recvBuffer;
     private int _recvOffset; // bytes of unconsumed data in buffer
-    private bool _disposed;
+    private int _disposed;
     private readonly string _id;
 
     public string Id => _id;
     public EndPoint? RemoteEndPoint { get; }
-    public bool IsConnected => !_disposed && _socket.Connected;
+    public bool IsConnected => _disposed == 0 && _socket.Connected;
 
     public TcpConnection(
         Socket socket,
@@ -52,7 +52,7 @@ public sealed class TcpConnection : IConnection, IDisposable
 
     private void BeginReceive()
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
 
         try
         {
@@ -121,7 +121,7 @@ public sealed class TcpConnection : IConnection, IDisposable
                 return;
             }
 
-            if (_disposed) return;
+            if (_disposed != 0) return;
 
             try
             {
@@ -147,7 +147,7 @@ public sealed class TcpConnection : IConnection, IDisposable
 
     public void Send(ReadOnlySpan<byte> data)
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
 
         var sendArgs = _sendPool.Rent();
         data.CopyTo(sendArgs.Buffer.AsSpan());
@@ -181,15 +181,14 @@ public sealed class TcpConnection : IConnection, IDisposable
 
     public void Disconnect()
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
         Dispose();
         _handler.OnDisconnected(this);
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
 
         try { _socket.Shutdown(SocketShutdown.Both); } catch { }
         try { _socket.Close(); } catch { }

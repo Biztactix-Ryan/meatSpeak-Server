@@ -5,6 +5,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 
+[FloodPenalty(3)]
 public sealed class NamesHandler : ICommandHandler
 {
     private readonly IServer _server;

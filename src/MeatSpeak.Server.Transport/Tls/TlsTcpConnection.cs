@@ -15,11 +15,11 @@ public sealed class TlsTcpConnection : IConnection, IDisposable
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly string _id;
-    private volatile bool _disposed;
+    private int _disposed;
 
     public string Id => _id;
     public EndPoint? RemoteEndPoint { get; }
-    public bool IsConnected => !_disposed && _socket.Connected;
+    public bool IsConnected => _disposed == 0 && _socket.Connected;
 
     public TlsTcpConnection(
         Socket socket,
@@ -44,7 +44,7 @@ public sealed class TlsTcpConnection : IConnection, IDisposable
 
         try
         {
-            while (!ct.IsCancellationRequested && !_disposed)
+            while (!ct.IsCancellationRequested && _disposed == 0)
             {
                 int bytesRead;
                 try
@@ -104,14 +104,14 @@ public sealed class TlsTcpConnection : IConnection, IDisposable
 
     public void Send(ReadOnlySpan<byte> data)
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
         var copy = data.ToArray();
         _ = SendInternalAsync(copy);
     }
 
     public ValueTask SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        if (_disposed != 0) return ValueTask.CompletedTask;
         var copy = data.ToArray();
         _ = SendInternalAsync(copy);
         return ValueTask.CompletedTask;
@@ -122,7 +122,7 @@ public sealed class TlsTcpConnection : IConnection, IDisposable
         await _writeLock.WaitAsync();
         try
         {
-            if (!_disposed)
+            if (_disposed == 0)
             {
                 await _sslStream.WriteAsync(data);
                 await _sslStream.FlushAsync();
@@ -138,15 +138,14 @@ public sealed class TlsTcpConnection : IConnection, IDisposable
 
     public void Disconnect()
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
         Dispose();
         _handler.OnDisconnected(this);
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
 
         try { _sslStream.Close(); } catch { }
         try { _socket.Shutdown(SocketShutdown.Both); } catch { }

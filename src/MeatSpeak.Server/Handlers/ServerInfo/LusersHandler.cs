@@ -6,6 +6,7 @@ using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Numerics;
 
+[FloodPenalty(1)]
 public sealed class LusersHandler : ICommandHandler
 {
     private readonly IServer _server;

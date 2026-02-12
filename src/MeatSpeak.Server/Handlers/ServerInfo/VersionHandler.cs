@@ -5,6 +5,7 @@ using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 
+[FloodPenalty(1)]
 public sealed class VersionHandler : ICommandHandler
 {
     private readonly IServer _server;

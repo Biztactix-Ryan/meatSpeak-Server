@@ -15,13 +15,14 @@ public sealed class WebSocketConnection : IConnection, IDisposable
     private readonly System.Net.WebSockets.WebSocket _ws;
     private readonly IConnectionHandler _handler;
     private readonly ILogger _logger;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly string _id;
     private readonly EndPoint? _remoteEndPoint;
-    private volatile bool _disposed;
+    private int _disposed;
 
     public string Id => _id;
     public EndPoint? RemoteEndPoint => _remoteEndPoint;
-    public bool IsConnected => !_disposed && _ws.State == WebSocketState.Open;
+    public bool IsConnected => _disposed == 0 && _ws.State == WebSocketState.Open;
 
     public WebSocketConnection(
         System.Net.WebSockets.WebSocket ws,
@@ -158,7 +159,7 @@ public sealed class WebSocketConnection : IConnection, IDisposable
 
     public void Send(ReadOnlySpan<byte> data)
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
 
         // Send as a text frame (IRC over WebSocket uses text frames)
         // We need to copy since WebSocket SendAsync requires a buffer that lives past this call
@@ -168,7 +169,7 @@ public sealed class WebSocketConnection : IConnection, IDisposable
 
     public ValueTask SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        if (_disposed != 0) return ValueTask.CompletedTask;
 
         var copy = data.ToArray();
         _ = SendInternalAsync(copy);
@@ -177,6 +178,7 @@ public sealed class WebSocketConnection : IConnection, IDisposable
 
     private async Task SendInternalAsync(byte[] data)
     {
+        await _writeLock.WaitAsync();
         try
         {
             if (_ws.State == WebSocketState.Open)
@@ -196,11 +198,15 @@ public sealed class WebSocketConnection : IConnection, IDisposable
         {
             // Already disposed
         }
+        finally
+        {
+            _writeLock.Release();
+        }
     }
 
     public void Disconnect()
     {
-        if (_disposed) return;
+        if (_disposed != 0) return;
 
         // Abort the WebSocket immediately. This unblocks any pending ReceiveAsync
         // in the RunAsync loop, which will then call OnDisconnected and Dispose.
@@ -209,9 +215,9 @@ public sealed class WebSocketConnection : IConnection, IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
 
         try { _ws.Dispose(); } catch { }
+        _writeLock.Dispose();
     }
 }

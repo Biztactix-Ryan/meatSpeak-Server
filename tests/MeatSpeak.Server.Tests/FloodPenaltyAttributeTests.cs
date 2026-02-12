@@ -26,8 +26,8 @@ public class FloodPenaltyAttributeTests
         => Assert.Equal(0, GetFloodPenaltyCost(typeof(PongHandler)));
 
     [Fact]
-    public void CapHandler_HasCostZero()
-        => Assert.Equal(0, GetFloodPenaltyCost(typeof(CapHandler)));
+    public void CapHandler_HasCostOne()
+        => Assert.Equal(1, GetFloodPenaltyCost(typeof(CapHandler)));
 
     [Fact]
     public void QuitHandler_HasCostZero()
@@ -78,20 +78,20 @@ public class FloodPenaltyAttributeTests
         => Assert.Null(GetFloodPenaltyCost(typeof(UserHandler)));
 
     [Fact]
-    public void WhoHandler_HasNoAttribute_DefaultCostOne()
-        => Assert.Null(GetFloodPenaltyCost(typeof(WhoHandler)));
+    public void WhoHandler_HasCostThree()
+        => Assert.Equal(3, GetFloodPenaltyCost(typeof(WhoHandler)));
 
     [Fact]
-    public void WhoisHandler_HasNoAttribute_DefaultCostOne()
-        => Assert.Null(GetFloodPenaltyCost(typeof(WhoisHandler)));
+    public void WhoisHandler_HasCostThree()
+        => Assert.Equal(3, GetFloodPenaltyCost(typeof(WhoisHandler)));
 
     [Fact]
-    public void ListHandler_HasNoAttribute_DefaultCostOne()
-        => Assert.Null(GetFloodPenaltyCost(typeof(ListHandler)));
+    public void ListHandler_HasCostThree()
+        => Assert.Equal(3, GetFloodPenaltyCost(typeof(ListHandler)));
 
     [Fact]
-    public void NamesHandler_HasNoAttribute_DefaultCostOne()
-        => Assert.Null(GetFloodPenaltyCost(typeof(NamesHandler)));
+    public void NamesHandler_HasCostThree()
+        => Assert.Equal(3, GetFloodPenaltyCost(typeof(NamesHandler)));
 
     [Fact]
     public void PartHandler_HasNoAttribute_DefaultCostOne()

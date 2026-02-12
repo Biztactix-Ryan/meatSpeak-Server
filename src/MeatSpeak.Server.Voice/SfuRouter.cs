@@ -1,5 +1,6 @@
 namespace MeatSpeak.Server.Voice;
 
+using System.Collections.Concurrent;
 using MeatSpeak.Protocol;
 using MeatSpeak.Server.Transport.Udp;
 using Microsoft.Extensions.Logging;
@@ -11,7 +12,7 @@ public sealed class SfuRouter
     private readonly SilenceDetector _silenceDetector;
     private readonly UdpSender? _sender;
     private readonly ILogger<SfuRouter> _logger;
-    private readonly Dictionary<string, VoiceChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, VoiceChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
 
     public SfuRouter(
         SsrcManager ssrcManager,
@@ -28,16 +29,9 @@ public sealed class SfuRouter
     }
 
     public VoiceChannel GetOrCreateChannel(string name)
-    {
-        if (!_channels.TryGetValue(name, out var channel))
-        {
-            channel = new VoiceChannel(name);
-            _channels[name] = channel;
-        }
-        return channel;
-    }
+        => _channels.GetOrAdd(name, static n => new VoiceChannel(n));
 
-    public void RemoveChannel(string name) => _channels.Remove(name);
+    public void RemoveChannel(string name) => _channels.TryRemove(name, out _);
 
     public void Route(VoicePacket packet, VoiceChannel channel, VoiceSession sender)
     {

@@ -40,7 +40,7 @@ public sealed class NumericSender
             "CHANNELLEN=64",
             "TOPICLEN=390",
             "STATUSMSG=@+",
-            "CHANLIMIT=#:25",
+            $"CHANLIMIT=#:{config.MaxChannelsPerUser}",
             "MODES=3",
             "EXCEPTS=e",
             "INVEX=I",

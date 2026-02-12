@@ -6,7 +6,7 @@ using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Registration;
 
-[FloodPenalty(0)]
+[FloodPenalty(1)]
 public sealed class CapHandler : ICommandHandler
 {
     private readonly IServer _server;

@@ -10,6 +10,7 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Data.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 
+[FloodPenalty(5)]
 public sealed class AuthenticateHandler : ICommandHandler
 {
     private readonly IServer _server;

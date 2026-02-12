@@ -77,6 +77,8 @@ public sealed class ServerConfig
     public bool WebSocketEnabled { get; set; } = true;
     public int WebSocketPort { get; set; } = 6669;
     public string WebSocketPath { get; set; } = "/irc";
+    public int MaxChannelsPerUser { get; set; } = 25;
+    public string? ServerPassword { get; set; }
     public string? OperName { get; set; }
     public string? OperPassword { get; set; }
     public DatabaseConfig Database { get; set; } = new();

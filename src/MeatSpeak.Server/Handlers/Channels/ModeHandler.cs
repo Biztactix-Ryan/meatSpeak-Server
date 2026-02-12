@@ -113,7 +113,10 @@ public sealed class ModeHandler : ICommandHandler
 
             var modeParams = new List<string> { channelName, modeString };
             if (channel.Key != null)
-                modeParams.Add(channel.Key);
+            {
+                var queryMember = channel.GetMember(session.Info.Nickname!);
+                modeParams.Add(queryMember is { IsOperator: true } ? channel.Key : "*");
+            }
             if (channel.UserLimit.HasValue)
                 modeParams.Add(channel.UserLimit.Value.ToString());
 

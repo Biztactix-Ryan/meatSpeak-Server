@@ -9,6 +9,7 @@ using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Data.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 
+[FloodPenalty(3)]
 public sealed class ChatHistoryHandler : ICommandHandler
 {
     private readonly IServer _server;
