@@ -22,7 +22,7 @@ meatSpeak builds on **IRCv3** — an open standard with decades of client suppor
 
 ## Features
 
-- **Full IRCv3 server** — 37 command handlers, CAP negotiation, SASL authentication, server-time, message-tags, echo-message, chat history, message redaction, and more
+- **Full IRCv3 server** — 37 command handlers, CAP negotiation, SASL authentication, server-time, message-tags, echo-message, chat history, message redaction, and [more](IRCv3.md)
 - **Voice chat** — SFU (Selective Forwarding Unit) architecture for low-latency audio without server-side mixing
 - **E2E encryption** — XChaCha20-Poly1305 for voice traffic, designed for privacy from the ground up
 - **Discord-style permissions** — Bitfield role system with hierarchical roles and per-channel overrides
