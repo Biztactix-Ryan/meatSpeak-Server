@@ -1,6 +1,7 @@
 namespace MeatSpeak.Server;
 
 using System.Net;
+using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Transport.Tcp;
 using MeatSpeak.Server.Transport.Tls;
@@ -34,7 +35,7 @@ public sealed class ServerHost : IHostedService
         var config = _server.Config;
 
         // Start TCP server
-        var sendPool = new SocketEventArgsPool(4096, preAllocate: 32);
+        var sendPool = new SocketEventArgsPool(IrcConstants.MaxLineLengthWithTags, preAllocate: 32);
         _tcpServer = new TcpServer(_connectionHandler, _logger as ILogger<TcpServer> ??
             LoggerFactory.Create(b => b.AddConsole()).CreateLogger<TcpServer>(), sendPool);
 

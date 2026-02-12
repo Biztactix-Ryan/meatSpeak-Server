@@ -111,8 +111,8 @@ public class PingTimeoutServiceTests
     [Fact]
     public async Task UnregisteredSession_NoPingSentButCanTimeout()
     {
-        // Unregistered session (still in CAP negotiation) that's idle but within timeout
-        var session = CreateSession("Unregistered", DateTimeOffset.UtcNow.AddSeconds(-90),
+        // Unregistered session (still in CAP negotiation) that's idle but within registration timeout (30s)
+        var session = CreateSession("Unregistered", DateTimeOffset.UtcNow.AddSeconds(-20),
             state: SessionState.Registering);
         var service = CreateService();
 
@@ -120,22 +120,22 @@ public class PingTimeoutServiceTests
 
         // Should NOT send PING to unregistered sessions (they haven't completed handshake)
         await session.DidNotReceive().SendMessageAsync(null, "PING", Arg.Any<string[]>());
-        // Should NOT disconnect — within 180s timeout
+        // Should NOT disconnect — within 30s registration timeout
         await session.DidNotReceive().DisconnectAsync(Arg.Any<string>());
     }
 
     [Fact]
     public async Task UnregisteredSession_StillTimesOut()
     {
-        // Unregistered session that has exceeded timeout
-        var session = CreateSession("Unregistered", DateTimeOffset.UtcNow.AddSeconds(-200),
+        // Unregistered session that has exceeded registration timeout (30s)
+        var session = CreateSession("Unregistered", DateTimeOffset.UtcNow.AddSeconds(-40),
             state: SessionState.Registering);
         var service = CreateService();
 
         await service.CheckSessionsAsync();
 
-        // Should still disconnect if past timeout, even if unregistered
-        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+        // Should disconnect with registration timeout
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Registration timeout")));
     }
 
     [Fact]
@@ -236,8 +236,8 @@ public class PingTimeoutServiceTests
     [Fact]
     public async Task ConnectingSession_NoPingSent()
     {
-        // Session in Connecting state (just connected, no data yet) — idle but below Registered
-        var session = CreateSession("Fresh", DateTimeOffset.UtcNow.AddSeconds(-90),
+        // Session in Connecting state (just connected, no data yet) — within registration timeout (30s)
+        var session = CreateSession("Fresh", DateTimeOffset.UtcNow.AddSeconds(-20),
             state: SessionState.Connecting);
         var service = CreateService();
 
@@ -245,15 +245,15 @@ public class PingTimeoutServiceTests
 
         // Connecting < Registered, so no PING should be sent
         await session.DidNotReceive().SendMessageAsync(null, "PING", Arg.Any<string[]>());
-        // Within timeout so no disconnect either
+        // Within registration timeout so no disconnect either
         await session.DidNotReceive().DisconnectAsync(Arg.Any<string>());
     }
 
     [Fact]
     public async Task CapNegotiatingSession_NoPingSent()
     {
-        // Session in CAP negotiation — idle but below Registered
-        var session = CreateSession("CapNeg", DateTimeOffset.UtcNow.AddSeconds(-90),
+        // Session in CAP negotiation — within registration timeout (30s)
+        var session = CreateSession("CapNeg", DateTimeOffset.UtcNow.AddSeconds(-20),
             state: SessionState.CapNegotiating);
         var service = CreateService();
 
@@ -280,27 +280,27 @@ public class PingTimeoutServiceTests
     [Fact]
     public async Task ConnectingSession_StillTimesOut()
     {
-        // Even Connecting sessions should be disconnected if past timeout
-        var session = CreateSession("Stale", DateTimeOffset.UtcNow.AddSeconds(-200),
+        // Even Connecting sessions should be disconnected if past registration timeout (30s)
+        var session = CreateSession("Stale", DateTimeOffset.UtcNow.AddSeconds(-40),
             state: SessionState.Connecting);
         var service = CreateService();
 
         await service.CheckSessionsAsync();
 
-        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Registration timeout")));
     }
 
     [Fact]
     public async Task CapNegotiatingSession_StillTimesOut()
     {
-        // CAP negotiation sessions stuck past timeout should be disconnected
-        var session = CreateSession("StuckCap", DateTimeOffset.UtcNow.AddSeconds(-200),
+        // CAP negotiation sessions stuck past registration timeout (30s) should be disconnected
+        var session = CreateSession("StuckCap", DateTimeOffset.UtcNow.AddSeconds(-40),
             state: SessionState.CapNegotiating);
         var service = CreateService();
 
         await service.CheckSessionsAsync();
 
-        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Registration timeout")));
     }
 
     [Fact]
@@ -354,7 +354,7 @@ public class PingTimeoutServiceTests
         var service = CreateService();
         await service.CheckSessionsAsync();
 
-        // Should disconnect without crashing on null nickname in log message
-        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+        // Should disconnect without crashing on null nickname in log message (registration timeout for pre-reg)
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Registration timeout")));
     }
 }

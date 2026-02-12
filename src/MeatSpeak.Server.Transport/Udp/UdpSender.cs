@@ -22,6 +22,8 @@ public sealed class UdpSender : IDisposable
     public void SendTo(ReadOnlySpan<byte> data, EndPoint remoteEndPoint)
     {
         if (_disposed) return;
+        if (data.Length > 1500)
+            return; // Drop oversized packets
 
         var args = _sendPool.Rent();
         data.CopyTo(args.Buffer.AsSpan());

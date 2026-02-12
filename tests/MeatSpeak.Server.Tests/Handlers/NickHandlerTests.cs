@@ -26,6 +26,7 @@ public class NickHandlerTests
         _server = Substitute.For<IServer>();
         _server.Config.Returns(new ServerConfig { ServerName = "test.server" });
         _server.Events.Returns(Substitute.For<IEventBus>());
+        _server.TryClaimNick(Arg.Any<string>(), Arg.Any<ISession>()).Returns(true);
         var numerics = new NumericSender(_server);
         _registration = new RegistrationPipeline(_server, numerics, null, NullLogger<RegistrationPipeline>.Instance, new ServerMetrics());
         _handler = new NickHandler(_server, _registration);
@@ -60,9 +61,7 @@ public class NickHandlerTests
     [Fact]
     public async Task HandleAsync_NickInUse_SendsError()
     {
-        var existingSession = Substitute.For<ISession>();
-        existingSession.Id.Returns("other-session");
-        _server.FindSessionByNick("TakenNick").Returns(existingSession);
+        _server.TryClaimNick("TakenNick", Arg.Any<ISession>()).Returns(false);
 
         var session = Substitute.For<ISession>();
         session.Id.Returns("my-session");

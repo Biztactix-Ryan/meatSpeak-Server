@@ -19,7 +19,7 @@ public sealed class TcpServer : IDisposable
     {
         _handler = handler;
         _logger = logger;
-        _sendPool = sendPool ?? new SocketEventArgsPool(4096, preAllocate: 16);
+        _sendPool = sendPool ?? new SocketEventArgsPool(4608, preAllocate: 16);
     }
 
     public void Start(IPEndPoint endPoint, int backlog = 2048)

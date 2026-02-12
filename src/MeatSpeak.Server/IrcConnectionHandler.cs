@@ -1,5 +1,6 @@
 namespace MeatSpeak.Server;
 
+using System.Collections.Concurrent;
 using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
@@ -21,6 +22,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
     private readonly ServerMetrics _metrics;
     private readonly DbWriteQueue? _writeQueue;
     private readonly Dictionary<string, SessionImpl> _connectionSessions = new();
+    private readonly ConcurrentDictionary<string, int> _ipConnectionCounts = new();
     private readonly object _sessionsLock = new();
 
     public IrcConnectionHandler(IServer server, ILogger<IrcConnectionHandler> logger, ServerMetrics metrics, DbWriteQueue? writeQueue = null)
@@ -33,11 +35,36 @@ public sealed class IrcConnectionHandler : IConnectionHandler
 
     public void OnConnected(IConnection connection)
     {
+        // Enforce global connection limit
+        if (_server.ConnectionCount >= _server.Config.MaxConnections)
+        {
+            _logger.LogWarning("Max connections ({Max}) reached, rejecting {Remote}",
+                _server.Config.MaxConnections, connection.RemoteEndPoint);
+            connection.Disconnect();
+            return;
+        }
+
+        // Enforce per-IP connection limit (exempt IPs bypass this)
+        var ip = connection.RemoteEndPoint?.ToString()?.Split(':')[0] ?? "unknown";
+        var isExempt = _server.Config.ExemptIps.Contains(ip);
+        if (!isExempt)
+        {
+            var ipCount = _ipConnectionCounts.AddOrUpdate(ip, 1, (_, count) => count + 1);
+            if (ipCount > _server.Config.MaxConnectionsPerIp)
+            {
+                _ipConnectionCounts.AddOrUpdate(ip, 0, (_, count) => Math.Max(0, count - 1));
+                _logger.LogWarning("Per-IP limit ({Max}) exceeded for {Ip}, rejecting connection",
+                    _server.Config.MaxConnectionsPerIp, ip);
+                connection.Disconnect();
+                return;
+            }
+        }
+
         var session = new SessionImpl(connection, _server.Config.ServerName);
         lock (_sessionsLock)
             _connectionSessions[connection.Id] = session;
         var floodConfig = _server.Config.Flood;
-        if (floodConfig.Enabled)
+        if (floodConfig.Enabled && !isExempt)
         {
             session.Info.FloodLimiter = new FloodLimiter(
                 floodConfig.BurstLimit,
@@ -45,6 +72,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 floodConfig.ExcessFloodThreshold);
         }
         _server.AddSession(session);
+        session.StartCommandProcessing();
         _metrics.ConnectionAccepted();
         _metrics.ConnectionActive();
         _server.Events.Publish(new SessionConnectedEvent(session.Id));
@@ -154,19 +182,17 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             parsed.TryGetValue("label", out label);
         }
 
-        // Fire and forget the handler (we're on the transport callback thread)
-        _ = Task.Run(async () =>
+        // Enqueue command to per-session serialized processing queue
+        session.CommandWriter.TryWrite(async () =>
         {
             var start = ServerMetrics.GetTimestamp();
             try
             {
-                // Set up labeled-response tracking
                 session.Info.CurrentLabel = label;
                 session.Info.LabeledMessageCount = 0;
 
                 await handler.HandleAsync(session, message);
 
-                // If a label was set and no messages were sent, send ACK
                 if (label != null && session.Info.LabeledMessageCount == 0)
                 {
                     var tags = Capabilities.CapHelper.BuildTags(session);
@@ -199,6 +225,10 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 return;
         }
 
+        // Decrement per-IP counter
+        var ip = session.Info.Hostname ?? "unknown";
+        _ipConnectionCounts.AddOrUpdate(ip, 0, (_, count) => Math.Max(0, count - 1));
+
         var nick = session.Info.Nickname;
         if (nick != null)
         {
@@ -212,6 +242,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             _server.UpdateNickIndex(nick, null, session);
         }
         _server.RemoveSession(session.Id);
+        session.StopCommandProcessing();
 
         // Move broadcast off the transport thread to avoid blocking accept/receive
         _ = Task.Run(async () =>

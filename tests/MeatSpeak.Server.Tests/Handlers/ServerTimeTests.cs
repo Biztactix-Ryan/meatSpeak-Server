@@ -26,6 +26,7 @@ public class ServerTimeTests
         _server = Substitute.For<IServer>();
         _server.Config.Returns(new ServerConfig { ServerName = "test.server" });
         _server.Events.Returns(Substitute.For<IEventBus>());
+        _server.TryClaimNick(Arg.Any<string>(), Arg.Any<ISession>()).Returns(true);
         _channels = new Dictionary<string, IChannel>(StringComparer.OrdinalIgnoreCase);
         _server.Channels.Returns(_channels);
         _server.FindSessionByNick(Arg.Any<string>()).Returns((ISession?)null);

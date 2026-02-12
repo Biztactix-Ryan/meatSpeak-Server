@@ -80,6 +80,11 @@ public sealed class ServerState : IServer
             _nickIndex[newNick] = session;
     }
 
+    public bool TryClaimNick(string newNick, ISession session)
+    {
+        return _nickIndex.TryAdd(newNick, session);
+    }
+
     public IReadOnlyDictionary<string, IChannel> Channels => _channels;
 
     public IChannel GetOrCreateChannel(string name)

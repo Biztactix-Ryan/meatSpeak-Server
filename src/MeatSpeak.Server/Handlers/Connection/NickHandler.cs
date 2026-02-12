@@ -41,18 +41,23 @@ public sealed class NickHandler : ICommandHandler
             return;
         }
 
-        // Check for collision
-        var existing = _server.FindSessionByNick(newNick);
-        if (existing != null && existing.Id != session.Id)
+        var oldNick = session.Info.Nickname;
+
+        // Atomic nick claim: if the nick is already taken by someone else, fail
+        if (!string.Equals(oldNick, newNick, StringComparison.OrdinalIgnoreCase))
         {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NICKNAMEINUSE,
-                newNick, "Nickname is already in use");
-            return;
+            if (!_server.TryClaimNick(newNick, session))
+            {
+                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NICKNAMEINUSE,
+                    newNick, "Nickname is already in use");
+                return;
+            }
+            // Remove old nick from index after successfully claiming new one
+            if (oldNick != null)
+                _server.UpdateNickIndex(oldNick, null, session);
         }
 
-        var oldNick = session.Info.Nickname;
         session.Info.Nickname = newNick;
-        _server.UpdateNickIndex(oldNick, newNick, session);
 
         if (session.State >= SessionState.Registered && oldNick != null)
         {

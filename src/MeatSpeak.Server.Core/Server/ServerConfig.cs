@@ -69,8 +69,10 @@ public sealed class ServerConfig
     public int UdpPort { get; set; } = 6668;
     public int AdminPort { get; set; } = 6670;
     public int MaxConnections { get; set; } = 1024;
+    public int MaxConnectionsPerIp { get; set; } = 10;
     public int PingInterval { get; set; } = 60;
     public int PingTimeout { get; set; } = 180;
+    public int RegistrationTimeout { get; set; } = 30;
     public string Version { get; set; } = "meatspeak-0.1.0";
     public bool WebSocketEnabled { get; set; } = true;
     public int WebSocketPort { get; set; } = 6669;
@@ -81,4 +83,9 @@ public sealed class ServerConfig
     public TlsConfig Tls { get; set; } = new();
     public AdminApiConfig AdminApi { get; set; } = new();
     public FloodConfig Flood { get; set; } = new();
+
+    /// <summary>
+    /// IPs exempt from per-IP connection limits and flood protection (e.g. benchmarks, monitoring).
+    /// </summary>
+    public HashSet<string> ExemptIps { get; set; } = new();
 }

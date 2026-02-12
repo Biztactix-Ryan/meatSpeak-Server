@@ -21,6 +21,7 @@ public interface IServer
     void RemoveSession(string sessionId);
     ISession? FindSessionByNick(string nickname);
     void UpdateNickIndex(string? oldNick, string? newNick, ISession session);
+    bool TryClaimNick(string newNick, ISession session);
 
     // Channel management
     IReadOnlyDictionary<string, IChannel> Channels { get; }

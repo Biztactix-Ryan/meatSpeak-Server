@@ -39,7 +39,7 @@ public sealed class TlsTcpConnection : IConnection, IDisposable
     {
         _handler.OnConnected(this);
 
-        var buffer = BufferPool.Rent(4096);
+        var buffer = BufferPool.Rent(4610);
         int offset = 0;
 
         try

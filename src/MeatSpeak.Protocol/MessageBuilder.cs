@@ -7,6 +7,7 @@ public static class MessageBuilder
     public static int Write(Span<byte> buffer, string? prefix, string command, ReadOnlySpan<string> parameters)
     {
         int pos = 0;
+        int maxPayload = buffer.Length - 2; // reserve 2 for CRLF
 
         if (prefix != null)
         {
@@ -19,11 +20,18 @@ public static class MessageBuilder
 
         for (int i = 0; i < parameters.Length; i++)
         {
+            if (pos >= maxPayload) break; // truncate if we'd overflow
             buffer[pos++] = IrcConstants.Space;
             bool isLast = i == parameters.Length - 1;
             if (isLast && (parameters[i].Contains(' ') || parameters[i].Length == 0 || parameters[i][0] == ':'))
+            {
+                if (pos >= maxPayload) break;
                 buffer[pos++] = IrcConstants.Colon;
-            pos += Encoding.UTF8.GetBytes(parameters[i], buffer[pos..]);
+            }
+            int available = maxPayload - pos;
+            if (available <= 0) break;
+            int written = Encoding.UTF8.GetBytes(parameters[i].AsSpan(), buffer[pos..Math.Min(pos + available, buffer.Length)]);
+            pos += written;
         }
 
         buffer[pos++] = IrcConstants.CR;

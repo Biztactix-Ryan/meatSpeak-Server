@@ -15,6 +15,7 @@ public sealed class PingTimeoutService : BackgroundService
     private readonly TimeSpan _checkInterval;
     private readonly TimeSpan _pingInterval;
     private readonly TimeSpan _pingTimeout;
+    private readonly TimeSpan _registrationTimeout;
 
     public PingTimeoutService(IServer server, ILogger<PingTimeoutService> logger, ServerMetrics metrics)
     {
@@ -23,6 +24,7 @@ public sealed class PingTimeoutService : BackgroundService
         _metrics = metrics;
         _pingInterval = TimeSpan.FromSeconds(server.Config.PingInterval);
         _pingTimeout = TimeSpan.FromSeconds(server.Config.PingTimeout);
+        _registrationTimeout = TimeSpan.FromSeconds(server.Config.RegistrationTimeout);
         // Check at half the ping interval for responsive detection
         _checkInterval = TimeSpan.FromSeconds(Math.Max(server.Config.PingInterval / 2, 10));
     }
@@ -60,6 +62,24 @@ public sealed class PingTimeoutService : BackgroundService
                 continue;
 
             var idle = now - session.Info.LastActivity;
+
+            // Disconnect pre-registration sessions that take too long
+            if (session.State < SessionState.Registered && idle > _registrationTimeout)
+            {
+                _logger.LogInformation("Registration timeout for {Id}, idle {Idle}s",
+                    session.Id, (int)idle.TotalSeconds);
+                _metrics.PingTimeout();
+
+                try
+                {
+                    await session.DisconnectAsync("Registration timeout");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error disconnecting timed-out session {Id}", session.Id);
+                }
+                continue;
+            }
 
             if (idle > _pingTimeout)
             {

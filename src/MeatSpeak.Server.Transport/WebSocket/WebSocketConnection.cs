@@ -44,8 +44,8 @@ public sealed class WebSocketConnection : IConnection, IDisposable
     {
         _handler.OnConnected(this);
 
-        var buffer = new byte[4096];
-        var lineBuffer = new byte[4096];
+        var buffer = new byte[4610];
+        var lineBuffer = new byte[4610];
         int lineOffset = 0;
 
         try
