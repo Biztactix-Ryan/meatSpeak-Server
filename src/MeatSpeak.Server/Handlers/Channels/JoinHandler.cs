@@ -209,20 +209,47 @@ public sealed class JoinHandler : ICommandHandler
         var multiPrefix = CapHelper.HasCap(session, "multi-prefix");
         var userhostInNames = CapHelper.HasCap(session, "userhost-in-names");
 
-        var names = string.Join(" ", channel.Members.Select(m =>
+        // IRC max line = 512 bytes. Overhead: ":server 353 target = #channel :\r\n"
+        var target = session.Info.Nickname ?? "*";
+        int overhead = 1 + serverName.Length + 1 + 3 + 1 + target.Length + 1 + 1 + 1 + channel.Name.Length + 2 + 2; // :server 353 target = #chan :\r\n
+        int maxPayload = IrcConstants.MaxLineLength - overhead;
+        if (maxPayload < 32) maxPayload = 32;
+
+        var batch = new System.Text.StringBuilder(maxPayload);
+        foreach (var m in channel.Members)
         {
             var prefix = multiPrefix ? m.Value.AllPrefixChars : m.Value.PrefixChar;
+            string entry;
             if (userhostInNames)
             {
                 var memberSession = server.FindSessionByNick(m.Key);
                 if (memberSession != null)
-                    return $"{prefix}{memberSession.Info.Nickname}!{memberSession.Info.Username}@{memberSession.Info.Hostname}";
+                    entry = $"{prefix}{memberSession.Info.Nickname}!{memberSession.Info.Username}@{memberSession.Info.Hostname}";
+                else
+                    entry = $"{prefix}{m.Key}";
             }
-            return $"{prefix}{m.Key}";
-        }));
+            else
+            {
+                entry = $"{prefix}{m.Key}";
+            }
 
-        await session.SendNumericAsync(serverName, Numerics.RPL_NAMREPLY,
-            "=", channel.Name, names);
+            if (batch.Length > 0 && batch.Length + 1 + entry.Length > maxPayload)
+            {
+                await session.SendNumericAsync(serverName, Numerics.RPL_NAMREPLY,
+                    "=", channel.Name, batch.ToString());
+                batch.Clear();
+            }
+
+            if (batch.Length > 0) batch.Append(' ');
+            batch.Append(entry);
+        }
+
+        if (batch.Length > 0)
+        {
+            await session.SendNumericAsync(serverName, Numerics.RPL_NAMREPLY,
+                "=", channel.Name, batch.ToString());
+        }
+
         await session.SendNumericAsync(serverName, Numerics.RPL_ENDOFNAMES,
             channel.Name, "End of /NAMES list");
     }

@@ -72,7 +72,6 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 floodConfig.ExcessFloodThreshold);
         }
         _server.AddSession(session);
-        session.StartCommandProcessing();
         _metrics.ConnectionAccepted();
         _metrics.ConnectionActive();
         _server.Events.Publish(new SessionConnectedEvent(session.Id));
@@ -182,9 +181,13 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             parsed.TryGetValue("label", out label);
         }
 
-        // Enqueue command to per-session serialized processing queue
-        session.CommandWriter.TryWrite(async () =>
+        // Dispatch command with per-session serialization via SemaphoreSlim.
+        // Each command is a short-lived Task.Run (completes quickly, frees thread).
+        // The semaphore ensures only one command per session runs at a time,
+        // preventing data races on SessionInfo.
+        _ = Task.Run(async () =>
         {
+            await session.CommandLock.WaitAsync();
             var start = ServerMetrics.GetTimestamp();
             try
             {
@@ -212,6 +215,7 @@ public sealed class IrcConnectionHandler : IConnectionHandler
                 session.Info.CurrentLabel = null;
                 session.Info.LabeledMessageCount = 0;
                 _metrics.RecordCommandDuration(commandStr, ServerMetrics.GetElapsedMs(start));
+                session.CommandLock.Release();
             }
         });
     }
@@ -242,7 +246,6 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             _server.UpdateNickIndex(nick, null, session);
         }
         _server.RemoveSession(session.Id);
-        session.StopCommandProcessing();
 
         // Move broadcast off the transport thread to avoid blocking accept/receive
         _ = Task.Run(async () =>

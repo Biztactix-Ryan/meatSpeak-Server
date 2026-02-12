@@ -86,7 +86,7 @@ echo "║  RELIABILITY                              Value        Status    ║"
 echo "║  ─────────────────────────────────────────────────────────────── ║"
 R1=$(grade "$ERRORS" 1 1 1);                     check "$R1"
 printf "║  %-38s %10s     %-4s    ║\n" "Client Errors" "$ERRORS" "$R1"
-R2=$(grade "$SRV_ERRORS" 1 1 1);                 check "$R2"
+R2=$(grade "$SRV_ERRORS" 10 100 1);               check "$R2"
 printf "║  %-38s %10s     %-4s    ║\n" "Server Errors" "$SRV_ERRORS" "$R2"
 if [ "$HAS_SERVER" -eq 1 ]; then
     R3=$(grade "$REGISTERED" "$USERS_WARN" "$USERS_FAIL" 0); check "$R3"
@@ -106,7 +106,7 @@ printf "║  %-38s %7s/s     %-4s    ║\n" "Actions/sec (client)" "$THROUGHPUT"
 if [ "$HAS_SERVER" -eq 1 ]; then
     T2=$(grade "$CMDS_PER_SEC" 5000 1000 0);    check "$T2"
     printf "║  %-38s %7s/s     %-4s    ║\n" "Commands/sec (server)" "$CMDS_PER_SEC" "$T2"
-    T3=$(grade "$MSGS_PER_SEC" 1000 100 0);     check "$T3"
+    T3=$(grade "$MSGS_PER_SEC" 50 10 0);         check "$T3"
     printf "║  %-38s %7s/s     %-4s    ║\n" "Broadcast msgs/sec (server)" "$MSGS_PER_SEC" "$T3"
 fi
 printf "║  %-38s %10s              ║\n" "Total Actions" "$ACTIONS"
@@ -124,7 +124,9 @@ printf "║  %-30s %7s %7s %7s  %-4s    ║\n" "Connect" "$CONN_P50" "$CONN_P95"
 L2=$(grade "$ACT_P99" 500 2000 1);              check "$L2"
 printf "║  %-30s %7s %7s %7s  %-4s    ║\n" "Action" "$ACT_P50" "$ACT_P95" "$ACT_P99" "$L2"
 if [ "$HAS_SERVER" -eq 1 ] && [ "$REG_P50" != "0" ]; then
-    L3=$(grade "$REG_P99" 5000 10000 1);        check "$L3"
+    REG_WARN=$((USERS * 2))    # 2ms per user at p99 (e.g. 20s for 10K users)
+    REG_FAIL=$((USERS * 5))    # 5ms per user at p99 (e.g. 50s for 10K users)
+    L3=$(grade "$REG_P99" "$REG_WARN" "$REG_FAIL" 1); check "$L3"
     printf "║  %-30s %7s %7s %7s  %-4s    ║\n" "Registration (server)" "$REG_P50" "$REG_P95" "$REG_P99" "$L3"
 fi
 

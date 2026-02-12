@@ -1,7 +1,6 @@
 namespace MeatSpeak.Server.State;
 
 using System.Text;
-using System.Threading.Channels;
 using MeatSpeak.Protocol;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Permissions;
@@ -11,15 +10,18 @@ public sealed class SessionImpl : ISession
 {
     private readonly IConnection _connection;
     private readonly string _serverName;
-    private readonly Channel<Func<Task>> _commandQueue = Channel.CreateUnbounded<Func<Task>>(
-        new UnboundedChannelOptions { SingleReader = true });
+
+    // Serializes command execution per session to prevent data races on SessionInfo.
+    // Unlike Channel<T> + processing loop, this doesn't hold a thread pool thread
+    // between commands — the semaphore only blocks the specific Task.Run that's waiting.
+    private readonly SemaphoreSlim _commandLock = new(1, 1);
 
     public string Id => _connection.Id;
     public SessionState State { get; set; } = SessionState.Connecting;
     public SessionInfo Info { get; } = new();
     public ServerPermission CachedServerPermissions { get; set; }
     public IConnection Connection => _connection;
-    public ChannelWriter<Func<Task>> CommandWriter => _commandQueue.Writer;
+    public SemaphoreSlim CommandLock => _commandLock;
 
     public SessionImpl(IConnection connection, string serverName)
     {
@@ -79,30 +81,5 @@ public sealed class SessionImpl : ISession
         }
         _connection.Disconnect();
         return ValueTask.CompletedTask;
-    }
-
-    public void StartCommandProcessing()
-    {
-        _ = ProcessCommandsAsync();
-    }
-
-    private async Task ProcessCommandsAsync()
-    {
-        await foreach (var workItem in _commandQueue.Reader.ReadAllAsync())
-        {
-            try
-            {
-                await workItem();
-            }
-            catch (Exception)
-            {
-                // Errors are handled inside the work items
-            }
-        }
-    }
-
-    public void StopCommandProcessing()
-    {
-        _commandQueue.Writer.TryComplete();
     }
 }

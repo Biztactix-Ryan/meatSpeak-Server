@@ -68,6 +68,8 @@ public static class MessageBuilder
     {
         // Build: :serverName 001 target params...
         int pos = 0;
+        int maxPayload = buffer.Length - 2; // reserve 2 for CRLF
+
         buffer[pos++] = IrcConstants.Colon;
         pos += Encoding.UTF8.GetBytes(serverName, buffer[pos..]);
         buffer[pos++] = IrcConstants.Space;
@@ -80,11 +82,17 @@ public static class MessageBuilder
 
         for (int i = 0; i < parameters.Length; i++)
         {
+            if (pos >= maxPayload) break;
             buffer[pos++] = IrcConstants.Space;
             bool isLast = i == parameters.Length - 1;
             if (isLast)
+            {
+                if (pos >= maxPayload) break;
                 buffer[pos++] = IrcConstants.Colon;
-            pos += Encoding.UTF8.GetBytes(parameters[i], buffer[pos..]);
+            }
+            int available = maxPayload - pos;
+            if (available <= 0) break;
+            pos += Encoding.UTF8.GetBytes(parameters[i].AsSpan(), buffer[pos..Math.Min(pos + available, buffer.Length)]);
         }
 
         buffer[pos++] = IrcConstants.CR;

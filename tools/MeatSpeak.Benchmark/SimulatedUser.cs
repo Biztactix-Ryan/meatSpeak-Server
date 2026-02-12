@@ -48,7 +48,7 @@ public sealed class SimulatedUser
 
             // Wait for registration (001) with timeout
             var regDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            regDeadline.CancelAfter(TimeSpan.FromSeconds(10));
+            regDeadline.CancelAfter(TimeSpan.FromSeconds(_opts.RegTimeout));
             try
             {
                 while (!_registered && !regDeadline.Token.IsCancellationRequested)

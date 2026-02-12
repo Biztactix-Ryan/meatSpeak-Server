@@ -14,6 +14,7 @@ public sealed record BenchmarkOptions
     public int Delay { get; init; } = 50;
     public bool Quiet { get; init; } = false;
     public int MaxErrors { get; init; } = -1;
+    public int RegTimeout { get; init; } = 10;
     public string? OutputPath { get; init; }
 
     public static BenchmarkOptions Parse(string[] args)
@@ -59,6 +60,9 @@ public sealed record BenchmarkOptions
                 case "--max-errors" when i + 1 < args.Length:
                     opts = opts with { MaxErrors = int.Parse(args[++i]) };
                     break;
+                case "--reg-timeout" when i + 1 < args.Length:
+                    opts = opts with { RegTimeout = int.Parse(args[++i]) };
+                    break;
                 case "--output" when i + 1 < args.Length:
                     opts = opts with { OutputPath = args[++i] };
                     break;
@@ -94,6 +98,7 @@ public sealed record BenchmarkOptions
               --delay <ms>           Delay between actions (default: 50)
               --quiet                Suppress per-user logging
               --max-errors <n>       Exit with code 1 if errors exceed n (default: -1 = disabled)
+              --reg-timeout <s>      Registration timeout in seconds (default: 10)
               --output <path>        Write JSON results to file
               --help, -h             Show this help
             """);
