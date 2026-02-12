@@ -19,11 +19,7 @@ public sealed class CapabilityRegistry
     /// </summary>
     public string GetCapLsString()
     {
-        var parts = new List<string>();
-        foreach (var cap in _capabilities.Values)
-        {
-            parts.Add(cap.Value != null ? $"{cap.Name}={cap.Value}" : cap.Name);
-        }
-        return string.Join(" ", parts);
+        return string.Join(" ", _capabilities.Values
+            .Select(cap => cap.Value != null ? $"{cap.Name}={cap.Value}" : cap.Name));
     }
 }

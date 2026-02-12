@@ -7,7 +7,6 @@ using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Data;
-using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
 
 [FloodPenalty(2)]
@@ -99,7 +98,7 @@ public sealed class PrivmsgHandler : ICommandHandler
                 await CapHelper.SendWithTagsAndExtra(session, msgId, extra, session.Info.Prefix, IrcConstants.PRIVMSG, target, text);
             }
 
-            LogMessage(session.Info.Nickname!, target, null, text, "PRIVMSG", msgId);
+            ChatLogHelper.LogMessage(_writeQueue, session.Info.Nickname!, target, null, text, "PRIVMSG", msgId);
         }
         else
         {
@@ -133,21 +132,7 @@ public sealed class PrivmsgHandler : ICommandHandler
             _metrics?.MessagePrivate();
             _server.Events.Publish(new PrivateMessageEvent(session.Id, session.Info.Nickname!, target, text));
 
-            LogMessage(session.Info.Nickname!, null, target, text, "PRIVMSG", msgId);
+            ChatLogHelper.LogMessage(_writeQueue, session.Info.Nickname!, null, target, text, "PRIVMSG", msgId);
         }
-    }
-
-    private void LogMessage(string sender, string? channel, string? target, string text, string type, string msgId)
-    {
-        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-        {
-            ChannelName = channel,
-            Target = target,
-            Sender = sender,
-            Message = text,
-            MessageType = type,
-            SentAt = DateTimeOffset.UtcNow,
-            MsgId = msgId,
-        }));
     }
 }

@@ -21,12 +21,8 @@ public sealed class PassHandler : ICommandHandler
                 "You may not reregister");
             return;
         }
-        if (message.Parameters.Count < 1)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.PASS, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 1, IrcConstants.PASS))
             return;
-        }
         session.Info.ServerPassword = message.GetParam(0);
     }
 }

@@ -21,12 +21,8 @@ public sealed class MonitorHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 1)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.MONITOR, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 1, IrcConstants.MONITOR))
             return;
-        }
 
         var subCommand = message.GetParam(0)!;
         switch (subCommand)
@@ -121,17 +117,11 @@ public sealed class MonitorHandler : ICommandHandler
 
     private async ValueTask HandleStatus(ISession session)
     {
-        var online = new List<string>();
-        var offline = new List<string>();
-
-        foreach (var nick in session.Info.MonitorList)
-        {
-            var target = _server.FindSessionByNick(nick);
-            if (target != null && target.State >= SessionState.Registered)
-                online.Add(target.Info.Nickname!);
-            else
-                offline.Add(nick);
-        }
+        var lookup = session.Info.MonitorList
+            .Select(nick => (nick, target: _server.FindSessionByNick(nick)))
+            .ToList();
+        var online = lookup.Where(x => x.target is { State: >= SessionState.Registered }).Select(x => x.target!.Info.Nickname!).ToList();
+        var offline = lookup.Where(x => x.target is null or { State: < SessionState.Registered }).Select(x => x.nick).ToList();
 
         if (online.Count > 0)
         {

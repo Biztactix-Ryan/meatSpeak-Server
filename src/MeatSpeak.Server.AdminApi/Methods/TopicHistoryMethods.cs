@@ -11,14 +11,11 @@ public sealed class TopicHistoryQueryMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var channel = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
+        var p = AdminParamHelper.Require(parameters);
+        var channel = AdminParamHelper.RequireString(p, "channel");
 
         int limit = 20;
-        if (parameters.Value.TryGetProperty("limit", out var limitEl))
+        if (p.TryGetProperty("limit", out var limitEl))
             limit = limitEl.GetInt32();
 
         var entries = await _topicHistory.GetByChannelAsync(channel, limit, ct);

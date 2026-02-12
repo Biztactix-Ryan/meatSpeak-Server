@@ -1,7 +1,6 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
-using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Channels;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
@@ -20,12 +19,8 @@ public sealed class ModeHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 1)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.MODE, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 1, IrcConstants.MODE))
             return;
-        }
 
         var target = message.GetParam(0)!;
 
@@ -97,12 +92,9 @@ public sealed class ModeHandler : ICommandHandler
 
     private async ValueTask HandleChannelMode(ISession session, IrcMessage message, string channelName)
     {
-        if (!_server.Channels.TryGetValue(channelName, out var channel))
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOSUCHCHANNEL,
-                channelName, "No such channel");
+        var channel = await HandlerGuards.RequireChannel(session, _server.Config.ServerName, _server, channelName);
+        if (channel == null)
             return;
-        }
 
         if (message.Parameters.Count < 2)
         {
@@ -126,13 +118,8 @@ public sealed class ModeHandler : ICommandHandler
         }
 
         // Check chanop for setting modes
-        var membership = channel.GetMember(session.Info.Nickname!);
-        if (membership == null || !membership.IsOperator)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_CHANOPRIVSNEEDED,
-                channelName, "You're not channel operator");
+        if (await HandlerGuards.CheckChanOpPrivsNeeded(session, _server.Config.ServerName, channel, session.Info.Nickname!))
             return;
-        }
 
         var modeStr = message.GetParam(1)!;
         var adding = true;
@@ -196,12 +183,7 @@ public sealed class ModeHandler : ICommandHandler
             if (!string.IsNullOrEmpty(paramResult))
                 broadcastParams.Add(paramResult);
 
-            foreach (var (memberNick, _) in channel.Members)
-            {
-                var memberSession = _server.FindSessionByNick(memberNick);
-                if (memberSession != null)
-                    await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.MODE, broadcastParams.ToArray());
-            }
+            await ChannelBroadcaster.BroadcastToChannel(_server, channel, session.Info.Prefix, IrcConstants.MODE, broadcastParams.ToArray());
 
             _server.Events.Publish(new ModeChangedEvent(channelName,
                 modeResult + (string.IsNullOrEmpty(paramResult) ? "" : " " + paramResult),

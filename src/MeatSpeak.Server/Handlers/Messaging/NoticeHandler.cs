@@ -6,7 +6,6 @@ using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Data;
-using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.Diagnostics;
 
 [FloodPenalty(2)]
@@ -68,7 +67,7 @@ public sealed class NoticeHandler : ICommandHandler
                 await CapHelper.SendWithTagsAndExtra(session, msgId, extra, session.Info.Prefix, IrcConstants.NOTICE, target, text);
             }
 
-            LogMessage(session.Info.Nickname!, target, null, text, msgId);
+            ChatLogHelper.LogMessage(_writeQueue, session.Info.Nickname!, target, null, text, "NOTICE", msgId);
         }
         else
         {
@@ -87,21 +86,7 @@ public sealed class NoticeHandler : ICommandHandler
 
             _metrics?.MessagePrivate();
 
-            LogMessage(session.Info.Nickname!, null, target, text, msgId);
+            ChatLogHelper.LogMessage(_writeQueue, session.Info.Nickname!, null, target, text, "NOTICE", msgId);
         }
-    }
-
-    private void LogMessage(string sender, string? channel, string? target, string text, string msgId)
-    {
-        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-        {
-            ChannelName = channel,
-            Target = target,
-            Sender = sender,
-            Message = text,
-            MessageType = "NOTICE",
-            SentAt = DateTimeOffset.UtcNow,
-            MsgId = msgId,
-        }));
     }
 }

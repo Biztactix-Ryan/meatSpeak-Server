@@ -53,20 +53,11 @@ public sealed class WhoisHandler : ICommandHandler
             _server.Config.Description);
 
         // RPL_WHOISCHANNELS
-        var channels = new List<string>();
-        foreach (var channelName in targetSession.Info.Channels)
-        {
-            if (_server.Channels.TryGetValue(channelName, out var channel))
-            {
-                // Skip secret channels unless the querier is also a member
-                if (channel.Modes.Contains('s') && !channel.IsMember(session.Info.Nickname!))
-                    continue;
-
-                var membership = channel.GetMember(nick);
-                var prefix = membership?.PrefixChar ?? "";
-                channels.Add($"{prefix}{channelName}");
-            }
-        }
+        var channels = targetSession.Info.Channels
+            .Select(cn => _server.Channels.TryGetValue(cn, out var ch) ? (cn, ch) : default)
+            .Where(x => x.ch != null && (!x.ch.Modes.Contains('s') || x.ch.IsMember(session.Info.Nickname!)))
+            .Select(x => $"{x.ch!.GetMember(nick)?.PrefixChar ?? ""}{x.cn}")
+            .ToList();
         if (channels.Count > 0)
         {
             await session.SendNumericAsync(_server.Config.ServerName, Numerics.RPL_WHOISCHANNELS,

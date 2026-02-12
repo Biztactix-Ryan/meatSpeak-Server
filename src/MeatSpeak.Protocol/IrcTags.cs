@@ -29,21 +29,8 @@ public static class IrcTags
 
     public static string Serialize(IReadOnlyDictionary<string, string?> tags)
     {
-        // builds "key1=value1;key2;key3=value3"
-        var sb = new System.Text.StringBuilder();
-        bool first = true;
-        foreach (var (key, value) in tags)
-        {
-            if (!first) sb.Append(';');
-            first = false;
-            sb.Append(key);
-            if (value != null)
-            {
-                sb.Append('=');
-                sb.Append(EscapeValue(value));
-            }
-        }
-        return sb.ToString();
+        return string.Join(";", tags.Select(kvp =>
+            kvp.Value != null ? $"{kvp.Key}={EscapeValue(kvp.Value)}" : kvp.Key));
     }
 
     private static string UnescapeValue(string value)

@@ -36,12 +36,8 @@ public sealed class RedactHandler : ICommandHandler
         }
 
         // REDACT <target> <msgid> [reason]
-        if (message.Parameters.Count < 2)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.REDACT, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 2, IrcConstants.REDACT))
             return;
-        }
 
         var target = message.GetParam(0)!;
         var msgId = message.GetParam(1)!;
@@ -90,12 +86,9 @@ public sealed class RedactHandler : ICommandHandler
 
         if (target.StartsWith('#'))
         {
-            if (!_server.Channels.TryGetValue(target, out var channel))
-            {
-                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOSUCHCHANNEL,
-                    target, "No such channel");
+            var channel = await HandlerGuards.RequireChannel(session, _server.Config.ServerName, _server, target);
+            if (channel == null)
                 return;
-            }
 
             if (!channel.IsMember(session.Info.Nickname!))
             {

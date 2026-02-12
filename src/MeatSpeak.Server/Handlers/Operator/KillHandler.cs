@@ -15,12 +15,8 @@ public sealed class KillHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 2)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.KILL, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 2, IrcConstants.KILL))
             return;
-        }
 
         // Require IRC operator
         if (!session.Info.UserModes.Contains('o'))
@@ -44,24 +40,9 @@ public sealed class KillHandler : ICommandHandler
         var killReason = $"Killed ({session.Info.Nickname} ({reason}))";
 
         // Broadcast QUIT to all channels the target was in
-        var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var channelName in targetSession.Info.Channels.ToList())
-        {
-            if (_server.Channels.TryGetValue(channelName, out var channel))
-            {
-                foreach (var (memberNick, _) in channel.Members)
-                {
-                    if (string.Equals(memberNick, targetNick, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (notified.Add(memberNick))
-                    {
-                        var memberSession = _server.FindSessionByNick(memberNick);
-                        if (memberSession != null)
-                            await memberSession.SendMessageAsync(targetSession.Info.Prefix, IrcConstants.QUIT, killReason);
-                    }
-                }
-            }
-        }
+        await ChannelBroadcaster.BroadcastAcrossChannels(
+            _server, targetSession.Info.Channels.ToList(), targetNick,
+            targetSession.Info.Prefix, IrcConstants.QUIT, killReason);
 
         await targetSession.DisconnectAsync(killReason);
     }

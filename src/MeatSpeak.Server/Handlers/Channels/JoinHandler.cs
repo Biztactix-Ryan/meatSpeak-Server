@@ -29,12 +29,8 @@ public sealed class JoinHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 1)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.JOIN, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 1, IrcConstants.JOIN))
             return;
-        }
 
         // JOIN 0 = part all channels
         if (message.GetParam(0) == "0")
@@ -174,15 +170,7 @@ public sealed class JoinHandler : ICommandHandler
         _server.Events.Publish(new ChannelJoinedEvent(session.Id, nick, name));
 
         // Log JOIN event for chathistory event-playback
-        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-        {
-            ChannelName = name,
-            Sender = nick,
-            Message = string.Empty,
-            MessageType = IrcConstants.JOIN,
-            SentAt = DateTimeOffset.UtcNow,
-            MsgId = Capabilities.MsgIdGenerator.Generate(),
-        }));
+        ChatLogHelper.LogChannelEvent(_writeQueue, name, nick, string.Empty, IrcConstants.JOIN);
 
         // Persist new channel creation to database (first joiner triggers persist)
         if (channel.Members.Count == 1)

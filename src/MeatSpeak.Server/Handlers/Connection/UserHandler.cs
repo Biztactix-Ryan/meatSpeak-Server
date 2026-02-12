@@ -27,12 +27,8 @@ public sealed class UserHandler : ICommandHandler
                 "You may not reregister");
             return;
         }
-        if (message.Parameters.Count < 4)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.USER, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 4, IrcConstants.USER))
             return;
-        }
 
         var username = message.GetParam(0)!;
         var realname = message.GetParam(3)!;

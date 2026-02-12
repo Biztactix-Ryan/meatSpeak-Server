@@ -1,12 +1,10 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
-using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Data;
-using MeatSpeak.Server.Data.Entities;
 
 [FloodPenalty(2)]
 public sealed class KickHandler : ICommandHandler
@@ -24,32 +22,19 @@ public sealed class KickHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 2)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.KICK, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 2, IrcConstants.KICK))
             return;
-        }
 
         var channelName = message.GetParam(0)!;
         var targetNick = message.GetParam(1)!;
         var reason = message.GetParam(2) ?? targetNick;
 
-        if (!_server.Channels.TryGetValue(channelName, out var channel))
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOSUCHCHANNEL,
-                channelName, "No such channel");
+        var channel = await HandlerGuards.RequireChannel(session, _server.Config.ServerName, _server, channelName);
+        if (channel == null)
             return;
-        }
 
-        // Check kicker is chanop
-        var kickerMembership = channel.GetMember(session.Info.Nickname!);
-        if (kickerMembership == null || !kickerMembership.IsOperator)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_CHANOPRIVSNEEDED,
-                channelName, "You're not channel operator");
+        if (await HandlerGuards.CheckChanOpPrivsNeeded(session, _server.Config.ServerName, channel, session.Info.Nickname!))
             return;
-        }
 
         // Check target is a member
         if (!channel.IsMember(targetNick))
@@ -60,12 +45,7 @@ public sealed class KickHandler : ICommandHandler
         }
 
         // Broadcast KICK to all channel members
-        foreach (var (memberNick, _) in channel.Members)
-        {
-            var memberSession = _server.FindSessionByNick(memberNick);
-            if (memberSession != null)
-                await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.KICK, channelName, targetNick, reason);
-        }
+        await ChannelBroadcaster.BroadcastToChannel(_server, channel, session.Info.Prefix, IrcConstants.KICK, channelName, targetNick, reason);
 
         // Remove target from channel
         channel.RemoveMember(targetNick);
@@ -74,15 +54,7 @@ public sealed class KickHandler : ICommandHandler
             targetSession.Info.Channels.Remove(channelName);
 
         // Log KICK event for chathistory event-playback
-        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-        {
-            ChannelName = channelName,
-            Sender = session.Info.Nickname!,
-            Message = $"{targetNick} {reason}",
-            MessageType = IrcConstants.KICK,
-            SentAt = DateTimeOffset.UtcNow,
-            MsgId = MeatSpeak.Server.Capabilities.MsgIdGenerator.Generate(),
-        }));
+        ChatLogHelper.LogChannelEvent(_writeQueue, channelName, session.Info.Nickname!, $"{targetNick} {reason}", IrcConstants.KICK);
 
         if (channel.Members.Count == 0)
             _server.RemoveChannel(channelName);

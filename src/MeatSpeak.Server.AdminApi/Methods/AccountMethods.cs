@@ -14,13 +14,9 @@ public sealed class AccountCreateMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var account = parameters.Value.GetProperty("account").GetString()
-            ?? throw new JsonException("Missing 'account'");
-        var password = parameters.Value.GetProperty("password").GetString()
-            ?? throw new JsonException("Missing 'password'");
+        var p = AdminParamHelper.Require(parameters);
+        var account = AdminParamHelper.RequireString(p, "account");
+        var password = AdminParamHelper.RequireString(p, "password");
 
         var existing = await _repo.GetByAccountAsync(account, ct);
         if (existing != null)

@@ -53,15 +53,9 @@ public sealed class ServerMotdSetMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var motd = parameters.Value.GetProperty("motd");
-        var lines = new List<string>();
-        foreach (var item in motd.EnumerateArray())
-            lines.Add(item.GetString() ?? "");
-
-        _server.Config.Motd = lines;
+        var p = AdminParamHelper.Require(parameters);
+        var motd = p.GetProperty("motd");
+        _server.Config.Motd = motd.EnumerateArray().Select(i => i.GetString() ?? "").ToList();
         return Task.FromResult<object?>(new { status = "ok" });
     }
 }
@@ -87,13 +81,9 @@ public sealed class ServerOperSetMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var name = parameters.Value.GetProperty("name").GetString()
-            ?? throw new JsonException("Missing 'name'");
-        var password = parameters.Value.GetProperty("password").GetString()
-            ?? throw new JsonException("Missing 'password'");
+        var p = AdminParamHelper.Require(parameters);
+        var name = AdminParamHelper.RequireString(p, "name");
+        var password = AdminParamHelper.RequireString(p, "password");
 
         _server.Config.OperName = name;
         _server.Config.OperPassword = PasswordHasher.HashPassword(password);

@@ -33,11 +33,8 @@ public sealed class UserInfoMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var nick = parameters.Value.GetProperty("nick").GetString()
-            ?? throw new JsonException("Missing 'nick'");
+        var p = AdminParamHelper.Require(parameters);
+        var nick = AdminParamHelper.RequireString(p, "nick");
 
         var session = _server.FindSessionByNick(nick);
         if (session == null)
@@ -72,15 +69,9 @@ public sealed class UserKickMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var nick = parameters.Value.GetProperty("nick").GetString()
-            ?? throw new JsonException("Missing 'nick'");
-
-        string? reason = null;
-        if (parameters.Value.TryGetProperty("reason", out var reasonEl))
-            reason = reasonEl.GetString();
+        var p = AdminParamHelper.Require(parameters);
+        var nick = AdminParamHelper.RequireString(p, "nick");
+        var reason = AdminParamHelper.OptionalString(p, "reason");
 
         var session = _server.FindSessionByNick(nick);
         if (session == null)
@@ -130,13 +121,9 @@ public sealed class UserMessageMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var nick = parameters.Value.GetProperty("nick").GetString()
-            ?? throw new JsonException("Missing 'nick'");
-        var message = parameters.Value.GetProperty("message").GetString()
-            ?? throw new JsonException("Missing 'message'");
+        var p = AdminParamHelper.Require(parameters);
+        var nick = AdminParamHelper.RequireString(p, "nick");
+        var message = AdminParamHelper.RequireString(p, "message");
 
         var session = _server.FindSessionByNick(nick);
         if (session == null)

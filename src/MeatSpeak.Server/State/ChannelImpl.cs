@@ -110,9 +110,7 @@ public sealed class ChannelImpl : IChannel
     {
         lock (_lock)
         {
-            var idx = _bans.FindIndex(b => string.Equals(b.Mask, mask, StringComparison.OrdinalIgnoreCase));
-            if (idx >= 0) { _bans.RemoveAt(idx); return true; }
-            return false;
+            return _bans.RemoveAll(b => string.Equals(b.Mask, mask, StringComparison.OrdinalIgnoreCase)) > 0;
         }
     }
 
@@ -145,9 +143,7 @@ public sealed class ChannelImpl : IChannel
     {
         lock (_lock)
         {
-            var idx = _excepts.FindIndex(e => string.Equals(e.Mask, mask, StringComparison.OrdinalIgnoreCase));
-            if (idx >= 0) { _excepts.RemoveAt(idx); return true; }
-            return false;
+            return _excepts.RemoveAll(e => string.Equals(e.Mask, mask, StringComparison.OrdinalIgnoreCase)) > 0;
         }
     }
 

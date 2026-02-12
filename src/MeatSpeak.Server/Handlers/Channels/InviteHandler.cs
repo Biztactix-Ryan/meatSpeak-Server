@@ -16,12 +16,8 @@ public sealed class InviteHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 2)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.INVITE, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 2, IrcConstants.INVITE))
             return;
-        }
 
         var targetNick = message.GetParam(0)!;
         var channelName = message.GetParam(1)!;
@@ -48,13 +44,8 @@ public sealed class InviteHandler : ICommandHandler
             // If channel is invite-only, inviter must be chanop
             if (channel.Modes.Contains('i'))
             {
-                var membership = channel.GetMember(session.Info.Nickname!);
-                if (membership == null || !membership.IsOperator)
-                {
-                    await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_CHANOPRIVSNEEDED,
-                        channelName, "You're not channel operator");
+                if (await HandlerGuards.CheckChanOpPrivsNeeded(session, _server.Config.ServerName, channel, session.Info.Nickname!))
                     return;
-                }
             }
 
             channel.AddInvite(targetNick);

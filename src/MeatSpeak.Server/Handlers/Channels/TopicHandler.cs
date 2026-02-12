@@ -1,7 +1,6 @@
 namespace MeatSpeak.Server.Handlers.Channels;
 
 using MeatSpeak.Protocol;
-using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Commands;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
@@ -25,28 +24,17 @@ public sealed class TopicHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 1)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.TOPIC, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 1, IrcConstants.TOPIC))
             return;
-        }
 
         var channelName = message.GetParam(0)!;
 
-        if (!_server.Channels.TryGetValue(channelName, out var channel))
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOSUCHCHANNEL,
-                channelName, "No such channel");
+        var channel = await HandlerGuards.RequireChannel(session, _server.Config.ServerName, _server, channelName);
+        if (channel == null)
             return;
-        }
 
-        if (!channel.IsMember(session.Info.Nickname!))
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOTONCHANNEL,
-                channelName, "You're not on that channel");
+        if (await HandlerGuards.CheckNotOnChannel(session, _server.Config.ServerName, channel, session.Info.Nickname!))
             return;
-        }
 
         if (message.Parameters.Count < 2)
         {
@@ -72,13 +60,8 @@ public sealed class TopicHandler : ICommandHandler
         // Set topic - check +t mode requires chanop
         if (channel.Modes.Contains('t'))
         {
-            var membership = channel.GetMember(session.Info.Nickname!);
-            if (membership == null || !membership.IsOperator)
-            {
-                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_CHANOPRIVSNEEDED,
-                    channelName, "You're not channel operator");
+            if (await HandlerGuards.CheckChanOpPrivsNeeded(session, _server.Config.ServerName, channel, session.Info.Nickname!))
                 return;
-            }
         }
 
         var newTopic = message.GetParam(1)!;
@@ -87,25 +70,12 @@ public sealed class TopicHandler : ICommandHandler
         channel.TopicSetAt = DateTimeOffset.UtcNow;
 
         // Broadcast TOPIC change to all channel members
-        foreach (var (memberNick, _) in channel.Members)
-        {
-            var memberSession = _server.FindSessionByNick(memberNick);
-            if (memberSession != null)
-                await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.TOPIC, channelName, newTopic);
-        }
+        await ChannelBroadcaster.BroadcastToChannel(_server, channel, session.Info.Prefix, IrcConstants.TOPIC, channelName, newTopic);
 
         _server.Events.Publish(new TopicChangedEvent(channelName, newTopic, session.Info.Nickname!));
 
         // Log TOPIC event for chathistory event-playback
-        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-        {
-            ChannelName = channelName,
-            Sender = session.Info.Nickname!,
-            Message = newTopic,
-            MessageType = IrcConstants.TOPIC,
-            SentAt = DateTimeOffset.UtcNow,
-            MsgId = Capabilities.MsgIdGenerator.Generate(),
-        }));
+        ChatLogHelper.LogChannelEvent(_writeQueue, channelName, session.Info.Nickname!, newTopic, IrcConstants.TOPIC);
 
         // Persist topic change to database
         if (_writeQueue != null)

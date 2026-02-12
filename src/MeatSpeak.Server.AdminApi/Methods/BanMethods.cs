@@ -42,18 +42,12 @@ public sealed class BanAddMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var mask = parameters.Value.GetProperty("mask").GetString()
-            ?? throw new JsonException("Missing 'mask'");
-
-        string? reason = null;
-        if (parameters.Value.TryGetProperty("reason", out var reasonEl))
-            reason = reasonEl.GetString();
+        var p = AdminParamHelper.Require(parameters);
+        var mask = AdminParamHelper.RequireString(p, "mask");
+        var reason = AdminParamHelper.OptionalString(p, "reason");
 
         DateTimeOffset? expiresAt = null;
-        if (parameters.Value.TryGetProperty("duration", out var durationEl))
+        if (p.TryGetProperty("duration", out var durationEl))
         {
             var seconds = durationEl.GetInt32();
             if (seconds > 0)
@@ -101,14 +95,8 @@ public sealed class BanRemoveMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var idStr = parameters.Value.GetProperty("id").GetString()
-            ?? throw new JsonException("Missing 'id'");
-
-        if (!Guid.TryParse(idStr, out var id))
-            throw new JsonException("Invalid 'id' format");
+        var p = AdminParamHelper.Require(parameters);
+        var id = AdminParamHelper.RequireGuid(p, "id");
 
         await _bans.RemoveAsync(id, ct);
 
@@ -118,7 +106,7 @@ public sealed class BanRemoveMethod : IAdminMethod
             {
                 Action = "ban.remove",
                 Actor = "admin-api",
-                Target = idStr,
+                Target = id.ToString(),
             }, ct);
         }
 
@@ -134,11 +122,8 @@ public sealed class BanCheckMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var mask = parameters.Value.GetProperty("mask").GetString()
-            ?? throw new JsonException("Missing 'mask'");
+        var p = AdminParamHelper.Require(parameters);
+        var mask = AdminParamHelper.RequireString(p, "mask");
 
         var banned = await _bans.IsBannedAsync(mask, ct);
         return new { banned };

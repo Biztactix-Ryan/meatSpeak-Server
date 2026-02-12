@@ -31,11 +31,8 @@ public sealed class ChannelInfoMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -75,13 +72,9 @@ public sealed class ChannelTopicMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var topic = parameters.Value.GetProperty("topic").GetString()
-            ?? throw new JsonException("Missing 'topic'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var topic = AdminParamHelper.RequireString(p, "topic");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return new { error = "channel_not_found" };
@@ -110,13 +103,9 @@ public sealed class ChannelModeMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var modes = parameters.Value.GetProperty("modes").GetString()
-            ?? throw new JsonException("Missing 'modes'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var modes = AdminParamHelper.RequireString(p, "modes");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -145,22 +134,19 @@ public sealed class ChannelCreateMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
 
         var channel = _server.GetOrCreateChannel(chanName);
 
-        if (parameters.Value.TryGetProperty("topic", out var topicEl))
+        if (p.TryGetProperty("topic", out var topicEl))
         {
             channel.Topic = topicEl.GetString();
             channel.TopicSetBy = _server.Config.ServerName;
             channel.TopicSetAt = DateTimeOffset.UtcNow;
         }
 
-        if (parameters.Value.TryGetProperty("modes", out var modesEl))
+        if (p.TryGetProperty("modes", out var modesEl))
         {
             var modes = modesEl.GetString();
             if (modes != null)
@@ -178,14 +164,14 @@ public sealed class ChannelCreateMethod : IAdminMethod
             }
         }
 
-        if (parameters.Value.TryGetProperty("key", out var keyEl))
+        if (p.TryGetProperty("key", out var keyEl))
         {
             channel.Key = keyEl.GetString();
             if (channel.Key != null)
                 channel.Modes.Add('k');
         }
 
-        if (parameters.Value.TryGetProperty("user_limit", out var limitEl) && limitEl.TryGetInt32(out var limit))
+        if (p.TryGetProperty("user_limit", out var limitEl) && limitEl.TryGetInt32(out var limit))
         {
             channel.UserLimit = limit > 0 ? limit : null;
             if (channel.UserLimit.HasValue)
@@ -206,15 +192,9 @@ public sealed class ChannelDeleteMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-
-        string? reason = null;
-        if (parameters.Value.TryGetProperty("reason", out var reasonEl))
-            reason = reasonEl.GetString();
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var reason = AdminParamHelper.OptionalString(p, "reason");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return new { error = "channel_not_found" };
@@ -245,11 +225,8 @@ public sealed class ChannelPermissionsMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
 
         var overrides = await _permissions.GetChannelOverridesAsync(chanName, ct);
         var roles = await _permissions.GetAllRolesAsync(ct);
@@ -277,14 +254,11 @@ public sealed class ChannelPermissionsSetMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var roleId = parameters.Value.GetProperty("role_id").GetGuid();
-        var allow = parameters.Value.TryGetProperty("allow", out var allowEl) ? allowEl.GetUInt64() : 0UL;
-        var deny = parameters.Value.TryGetProperty("deny", out var denyEl) ? denyEl.GetUInt64() : 0UL;
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var roleId = p.GetProperty("role_id").GetGuid();
+        var allow = p.TryGetProperty("allow", out var allowEl) ? allowEl.GetUInt64() : 0UL;
+        var deny = p.TryGetProperty("deny", out var denyEl) ? denyEl.GetUInt64() : 0UL;
 
         await _permissions.SetChannelOverrideAsync(new ChannelOverride(roleId, chanName,
             (ChannelPermission)allow, (ChannelPermission)deny), ct);
@@ -301,12 +275,9 @@ public sealed class ChannelPermissionsDeleteMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var roleId = parameters.Value.GetProperty("role_id").GetGuid();
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var roleId = p.GetProperty("role_id").GetGuid();
 
         await _permissions.DeleteChannelOverrideAsync(roleId, chanName, ct);
 
@@ -322,15 +293,10 @@ public sealed class ChannelMemberModeMethod : IAdminMethod
 
     public async Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var nick = parameters.Value.GetProperty("nick").GetString()
-            ?? throw new JsonException("Missing 'nick'");
-        var modes = parameters.Value.GetProperty("modes").GetString()
-            ?? throw new JsonException("Missing 'modes'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var nick = AdminParamHelper.RequireString(p, "nick");
+        var modes = AdminParamHelper.RequireString(p, "modes");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return new { error = "channel_not_found" };
@@ -382,11 +348,8 @@ public sealed class ChannelBansMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -412,15 +375,10 @@ public sealed class ChannelBansAddMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var mask = parameters.Value.GetProperty("mask").GetString()
-            ?? throw new JsonException("Missing 'mask'");
-        var setBy = parameters.Value.TryGetProperty("set_by", out var setByEl)
-            ? setByEl.GetString() ?? "admin" : "admin";
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var mask = AdminParamHelper.RequireString(p, "mask");
+        var setBy = AdminParamHelper.OptionalString(p, "set_by") ?? "admin";
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -438,13 +396,9 @@ public sealed class ChannelBansRemoveMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var mask = parameters.Value.GetProperty("mask").GetString()
-            ?? throw new JsonException("Missing 'mask'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var mask = AdminParamHelper.RequireString(p, "mask");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -462,11 +416,8 @@ public sealed class ChannelExceptsMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -492,15 +443,10 @@ public sealed class ChannelExceptsAddMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var mask = parameters.Value.GetProperty("mask").GetString()
-            ?? throw new JsonException("Missing 'mask'");
-        var setBy = parameters.Value.TryGetProperty("set_by", out var setByEl)
-            ? setByEl.GetString() ?? "admin" : "admin";
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var mask = AdminParamHelper.RequireString(p, "mask");
+        var setBy = AdminParamHelper.OptionalString(p, "set_by") ?? "admin";
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });
@@ -518,13 +464,9 @@ public sealed class ChannelExceptsRemoveMethod : IAdminMethod
 
     public Task<object?> ExecuteAsync(JsonElement? parameters, CancellationToken ct = default)
     {
-        if (parameters == null)
-            throw new JsonException("Missing parameters");
-
-        var chanName = parameters.Value.GetProperty("channel").GetString()
-            ?? throw new JsonException("Missing 'channel'");
-        var mask = parameters.Value.GetProperty("mask").GetString()
-            ?? throw new JsonException("Missing 'mask'");
+        var p = AdminParamHelper.Require(parameters);
+        var chanName = AdminParamHelper.RequireString(p, "channel");
+        var mask = AdminParamHelper.RequireString(p, "mask");
 
         if (!_server.Channels.TryGetValue(chanName, out var channel))
             return Task.FromResult<object?>(new { error = "channel_not_found" });

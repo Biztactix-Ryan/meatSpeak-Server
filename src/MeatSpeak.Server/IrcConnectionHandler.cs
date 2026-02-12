@@ -9,7 +9,6 @@ using MeatSpeak.Server.Capabilities;
 using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Diagnostics;
 using MeatSpeak.Server.Data;
-using MeatSpeak.Server.Data.Entities;
 using MeatSpeak.Server.State;
 using MeatSpeak.Server.Transport;
 using Microsoft.Extensions.Logging;
@@ -253,36 +252,17 @@ public sealed class IrcConnectionHandler : IConnectionHandler
             try
             {
                 // Broadcast QUIT to all users sharing channels (deduplicated)
-                var notified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var quitReason = "Connection closed";
-                foreach (var channelName in session.Info.Channels.ToList())
+                var channelList = session.Info.Channels.ToList();
+                await Handlers.ChannelBroadcaster.BroadcastAcrossChannels(
+                    _server, channelList, nick, session.Info.Prefix, IrcConstants.QUIT, quitReason);
+
+                // Per-channel cleanup: log events, remove member, clean up empty channels
+                foreach (var channelName in channelList)
                 {
                     if (_server.Channels.TryGetValue(channelName, out var channel))
                     {
-                        foreach (var (memberNick, _) in channel.Members)
-                        {
-                            if (nick != null &&
-                                string.Equals(memberNick, nick, StringComparison.OrdinalIgnoreCase))
-                                continue;
-                            if (notified.Add(memberNick))
-                            {
-                                var memberSession = _server.FindSessionByNick(memberNick);
-                                if (memberSession != null)
-                                    await CapHelper.SendWithTimestamp(memberSession, session.Info.Prefix, IrcConstants.QUIT, quitReason);
-                            }
-                        }
-
-                        // Log QUIT event per channel for chathistory event-playback
-                        _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-                        {
-                            ChannelName = channelName,
-                            Sender = nick!,
-                            Message = quitReason,
-                            MessageType = IrcConstants.QUIT,
-                            SentAt = DateTimeOffset.UtcNow,
-                            MsgId = MsgIdGenerator.Generate(),
-                        }));
-
+                        Handlers.ChatLogHelper.LogChannelEvent(_writeQueue, channelName, nick!, quitReason, IrcConstants.QUIT);
                         channel.RemoveMember(nick!);
                         if (channel.Members.Count == 0)
                             _server.RemoveChannel(channelName);

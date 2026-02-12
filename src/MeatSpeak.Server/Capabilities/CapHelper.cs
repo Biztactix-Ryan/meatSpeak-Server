@@ -76,13 +76,7 @@ public static class CapHelper
         if (string.IsNullOrEmpty(tagsString))
             return null;
 
-        var clientTags = new List<string>();
-        foreach (var tag in tagsString.Split(';'))
-        {
-            if (tag.Length > 0 && tag[0] == '+')
-                clientTags.Add(tag);
-        }
-
-        return clientTags.Count > 0 ? string.Join(';', clientTags) : null;
+        var result = string.Join(';', tagsString.Split(';').Where(t => t.Length > 0 && t[0] == '+'));
+        return string.IsNullOrEmpty(result) ? null : result;
     }
 }

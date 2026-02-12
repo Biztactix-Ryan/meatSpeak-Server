@@ -7,7 +7,6 @@ using MeatSpeak.Server.Core.Events;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Data;
-using MeatSpeak.Server.Data.Entities;
 
 public sealed class PartHandler : ICommandHandler
 {
@@ -24,12 +23,8 @@ public sealed class PartHandler : ICommandHandler
 
     public async ValueTask HandleAsync(ISession session, IrcMessage message, CancellationToken ct = default)
     {
-        if (message.Parameters.Count < 1)
-        {
-            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
-                IrcConstants.PART, "Not enough parameters");
+        if (await HandlerGuards.CheckNeedMoreParams(session, _server.Config.ServerName, message, 1, IrcConstants.PART))
             return;
-        }
 
         var channelNames = message.GetParam(0)!.Split(',');
         var reason = message.GetParam(1);
@@ -40,19 +35,12 @@ public sealed class PartHandler : ICommandHandler
             if (string.IsNullOrEmpty(name))
                 continue;
 
-            if (!_server.Channels.TryGetValue(name, out var channel))
-            {
-                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOSUCHCHANNEL,
-                    name, "No such channel");
+            var channel = await HandlerGuards.RequireChannel(session, _server.Config.ServerName, _server, name);
+            if (channel == null)
                 continue;
-            }
 
-            if (!channel.IsMember(session.Info.Nickname!))
-            {
-                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NOTONCHANNEL,
-                    name, "You're not on that channel");
+            if (await HandlerGuards.CheckNotOnChannel(session, _server.Config.ServerName, channel, session.Info.Nickname!))
                 continue;
-            }
 
             // Broadcast PART to all channel members (including sender)
             foreach (var (memberNick, _) in channel.Members)
@@ -77,15 +65,7 @@ public sealed class PartHandler : ICommandHandler
             _server.Events.Publish(new ChannelPartedEvent(session.Id, session.Info.Nickname!, name, reason));
 
             // Log PART event for chathistory event-playback
-            _writeQueue?.TryWrite(new AddChatLog(new ChatLogEntity
-            {
-                ChannelName = name,
-                Sender = session.Info.Nickname!,
-                Message = reason ?? string.Empty,
-                MessageType = IrcConstants.PART,
-                SentAt = DateTimeOffset.UtcNow,
-                MsgId = Capabilities.MsgIdGenerator.Generate(),
-            }));
+            ChatLogHelper.LogChannelEvent(_writeQueue, name, session.Info.Nickname!, reason ?? string.Empty, IrcConstants.PART);
 
             // Delete channel from database when it becomes empty
             if (channelRemoved)
