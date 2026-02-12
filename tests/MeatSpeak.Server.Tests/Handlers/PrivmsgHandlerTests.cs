@@ -30,10 +30,12 @@ public class PrivmsgHandlerTests
         _handler = new PrivmsgHandler(_server);
     }
 
-    private ISession CreateSession(string nick)
+    private ISession CreateSession(string nick, bool echoMessage = false)
     {
         var session = Substitute.For<ISession>();
         var info = new SessionInfo { Nickname = nick, Username = "user", Hostname = "host" };
+        if (echoMessage)
+            info.CapState.Acknowledged.Add("echo-message");
         session.Info.Returns(info);
         session.Id.Returns(nick + "-id");
         _server.FindSessionByNick(nick).Returns(session);
@@ -162,5 +164,157 @@ public class PrivmsgHandlerTests
 
         await sender.Received().SendNumericAsync("test.server", IrcNumerics.ERR_NOSUCHCHANNEL,
             Arg.Any<string[]>());
+    }
+
+    // --- New edge case tests ---
+
+    [Fact(Skip = "PRIVMSG handler does not yet enforce +m (moderated) mode - needs handler update")]
+    public async Task HandleAsync_ModeratedChannel_NonVoicedNonOp_SendsCannotSend()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.Modes.Add('m'); // moderated
+        channel.AddMember("Sender", new ChannelMembership { Nickname = "Sender" });
+        _channels["#test"] = channel;
+
+        var sender = CreateSession("Sender");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "#test", "Blocked by +m" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        // Expected: non-voiced, non-op user in +m channel gets ERR_CANNOTSENDTOCHAN
+        await sender.Received().SendNumericAsync("test.server", IrcNumerics.ERR_CANNOTSENDTOCHAN,
+            Arg.Any<string[]>());
+    }
+
+    [Fact(Skip = "PRIVMSG handler does not yet enforce +m (moderated) mode - needs handler update")]
+    public async Task HandleAsync_ModeratedChannel_VoicedUser_CanSend()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.Modes.Add('m'); // moderated
+        channel.AddMember("Sender", new ChannelMembership { Nickname = "Sender", HasVoice = true });
+        channel.AddMember("Other", new ChannelMembership { Nickname = "Other" });
+        _channels["#test"] = channel;
+
+        var sender = CreateSession("Sender");
+        var other = CreateSession("Other");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "#test", "Voiced user msg" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        // Voiced user should be able to send in +m channel
+        await other.Received().SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG",
+            Arg.Is<string[]>(p => p[0] == "#test" && p[1] == "Voiced user msg"));
+    }
+
+    [Fact(Skip = "PRIVMSG handler does not yet enforce +m (moderated) mode - needs handler update")]
+    public async Task HandleAsync_ModeratedChannel_OpUser_CanSend()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.Modes.Add('m'); // moderated
+        channel.AddMember("Sender", new ChannelMembership { Nickname = "Sender", IsOperator = true });
+        channel.AddMember("Other", new ChannelMembership { Nickname = "Other" });
+        _channels["#test"] = channel;
+
+        var sender = CreateSession("Sender");
+        var other = CreateSession("Other");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "#test", "Op user msg" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        // Op should be able to send in +m channel
+        await other.Received().SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG",
+            Arg.Is<string[]>(p => p[0] == "#test" && p[1] == "Op user msg"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelMessage_PublishesEvent()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Sender", new ChannelMembership { Nickname = "Sender" });
+        _channels["#test"] = channel;
+
+        var sender = CreateSession("Sender");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "#test", "Hello!" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        _events.Received().Publish(Arg.Is<ChannelMessageEvent>(e =>
+            e.Nickname == "Sender" && e.Channel == "#test" && e.Message == "Hello!"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_PrivateMessage_PublishesEvent()
+    {
+        var sender = CreateSession("Sender");
+        var target = CreateSession("Target");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "Target", "Hello!" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        _events.Received().Publish(Arg.Is<PrivateMessageEvent>(e =>
+            e.FromNick == "Sender" && e.ToNick == "Target" && e.Message == "Hello!"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelMessage_SkipsSender()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Sender", new ChannelMembership { Nickname = "Sender" });
+        channel.AddMember("Other1", new ChannelMembership { Nickname = "Other1" });
+        channel.AddMember("Other2", new ChannelMembership { Nickname = "Other2" });
+        _channels["#test"] = channel;
+
+        var sender = CreateSession("Sender");
+        var other1 = CreateSession("Other1");
+        var other2 = CreateSession("Other2");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "#test", "Broadcast test" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        // Other members receive the message
+        await other1.Received(1).SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG", Arg.Any<string[]>());
+        await other2.Received(1).SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG", Arg.Any<string[]>());
+        // Sender does NOT (no echo-message cap)
+        await sender.DidNotReceive().SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG", Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_EchoMessage_Channel_EchoesBackToSender()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Sender", new ChannelMembership { Nickname = "Sender" });
+        channel.AddMember("Other", new ChannelMembership { Nickname = "Other" });
+        _channels["#test"] = channel;
+
+        var sender = CreateSession("Sender", echoMessage: true);
+        var other = CreateSession("Other");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "#test", "Echo test" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        // Sender gets the echo back (has echo-message cap)
+        await sender.Received().SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG",
+            Arg.Is<string[]>(p => p[0] == "#test" && p[1] == "Echo test"));
+    }
+
+    [Fact]
+    public async Task HandleAsync_EchoMessage_Private_EchoesBackToSender()
+    {
+        var sender = CreateSession("Sender", echoMessage: true);
+        var target = CreateSession("Target");
+        var msg = new IrcMessage(null, null, "PRIVMSG", new[] { "Target", "Echo PM" });
+
+        await _handler.HandleAsync(sender, msg);
+
+        // Sender gets the echo back for private message too
+        await sender.Received().SendMessageAsync(
+            Arg.Any<string>(), "PRIVMSG",
+            Arg.Is<string[]>(p => p[0] == "Target" && p[1] == "Echo PM"));
     }
 }

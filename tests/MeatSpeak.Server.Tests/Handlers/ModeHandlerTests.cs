@@ -464,4 +464,292 @@ public class ModeHandlerTests
         await otherSession.Received().SendMessageAsync(
             Arg.Any<string>(), "MODE", Arg.Any<string[]>());
     }
+
+    // --- New compound/edge case tests ---
+
+    [Fact]
+    public async Task HandleAsync_CompoundModes_AppliesMultiple()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.Modes.Remove('n'); // clear defaults for clean test
+        channel.Modes.Remove('t');
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+nt" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Contains('n', channel.Modes);
+        Assert.Contains('t', channel.Modes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_MixedDirectionModes_AppliesCorrectly()
+    {
+        var channel = new ChannelImpl("#test"); // defaults: +nt
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // +s adds secret, -t removes topic-protected
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+s-t" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Contains('s', channel.Modes);
+        Assert.DoesNotContain('t', channel.Modes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OpAndVoiceTogether_AppliesBoth()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        channel.AddMember("User1", new ChannelMembership { Nickname = "User1" });
+        channel.AddMember("User2", new ChannelMembership { Nickname = "User2" });
+        _channels["#test"] = channel;
+
+        var opSession = CreateSession("Op");
+        CreateSession("User1");
+        CreateSession("User2");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+ov", "User1", "User2" });
+
+        await _handler.HandleAsync(opSession, msg);
+
+        Assert.True(channel.GetMember("User1")!.IsOperator);
+        Assert.True(channel.GetMember("User2")!.HasVoice);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ModeWithMissingParam_SkipsSilently()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        channel.AddMember("User", new ChannelMembership { Nickname = "User" });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // +o with no nick param - should be silently skipped
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+o" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // User should remain non-op
+        Assert.False(channel.GetMember("User")!.IsOperator);
+        // No event published since no modes were actually applied
+        _events.DidNotReceive().Publish(Arg.Any<ModeChangedEvent>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_LimitNonNumeric_IgnoresMode()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+l", "abc" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Null(channel.UserLimit);
+        Assert.DoesNotContain('l', channel.Modes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_LimitZero_IgnoresMode()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+l", "0" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Null(channel.UserLimit);
+        Assert.DoesNotContain('l', channel.Modes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_LimitNegative_IgnoresMode()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+l", "-5" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Null(channel.UserLimit);
+        Assert.DoesNotContain('l', channel.Modes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_KeyWithoutParam_IgnoresMode()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // +k with no key param
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+k" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.Null(channel.Key);
+        Assert.DoesNotContain('k', channel.Modes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_UnknownModeChar_IgnoredSilently()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // 'x' is not registered in ModeRegistry
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+x" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.DoesNotContain('x', channel.Modes);
+        // No mode change event since nothing was applied
+        _events.DidNotReceive().Publish(Arg.Any<ModeChangedEvent>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_BanListEmpty_SendsOnlyEndOfList()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // +b with no param = list bans, but ban list is empty
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+b" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // Should NOT send 367 (ban list entry) since there are no bans
+        await session.DidNotReceive().SendNumericAsync("test.server", 367, Arg.Any<string[]>());
+        // Should still send 368 (end of ban list)
+        await session.Received().SendNumericAsync("test.server", 368, Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ExceptListEmpty_SendsOnlyEndOfList()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // +e with no param = list exceptions, but list is empty
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+e" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // Should NOT send 348 (exception list entry)
+        await session.DidNotReceive().SendNumericAsync("test.server", 348, Arg.Any<string[]>());
+        // Should still send 349 (end of exception list)
+        await session.Received().SendNumericAsync("test.server", 349, Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_DeopSelf_Allowed()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "-o", "Op" });
+
+        await _handler.HandleAsync(session, msg);
+
+        Assert.False(channel.GetMember("Op")!.IsOperator);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ModeOnNonMember_SkipsSilently()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // "GhostNick" is not a member of the channel
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+o", "GhostNick" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // No mode change event since the target wasn't in the channel
+        _events.DidNotReceive().Publish(Arg.Any<ModeChangedEvent>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelModeQueryShowsKeyToOp()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.Key = "secretkey";
+        channel.Modes.Add('k');
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // Op should see the actual key
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_CHANNELMODEIS,
+            Arg.Is<string[]>(p => p.Any(s => s == "secretkey")));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ChannelModeQueryHidesKeyFromNonOp()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.Key = "secretkey";
+        channel.Modes.Add('k');
+        channel.AddMember("User", new ChannelMembership { Nickname = "User", IsOperator = false });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("User");
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // Non-op should see "*" instead of the actual key
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.RPL_CHANNELMODEIS,
+            Arg.Is<string[]>(p => p.Any(s => s == "*") && !p.Any(s => s == "secretkey")));
+    }
+
+    [Fact]
+    public async Task HandleAsync_RemoveBanWithoutParam_IgnoresSilently()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddBan(new BanEntry("*!*@bad.host", "Op", DateTimeOffset.UtcNow));
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        _channels["#test"] = channel;
+
+        var session = CreateSession("Op");
+        // -b with no mask param
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "-b" });
+
+        await _handler.HandleAsync(session, msg);
+
+        // Ban should still be present (not removed)
+        Assert.Single(channel.Bans);
+        // No mode change event since nothing was applied
+        _events.DidNotReceive().Publish(Arg.Any<ModeChangedEvent>());
+    }
 }
