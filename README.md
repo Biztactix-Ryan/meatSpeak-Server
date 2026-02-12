@@ -2,11 +2,7 @@
   <img src="meatSpeakLogo.png" alt="meatSpeak logo" width="200">
 </p>
 
-<div align="center">
-
-$${\color{red}\Huge\textsf{meat}}{\Huge\textsf{Speak}}$$
-
-</div>
+# $${\color{#FF4444}\textsf{meat}}{\textsf{Speak}}$$
 
 <p align="center"><strong>Free, open-source communication server — IRC with voice</strong></p>
 
