@@ -119,7 +119,7 @@ The server is split into focused projects:
 | `MeatSpeak.Server.AdminApi` | JSON-RPC 2.0 admin API with API key auth |
 | `MeatSpeak.Server` | Main application — IRC handlers, server host, DI wiring |
 
-For detailed architecture documentation, see [CLAUDE.md](CLAUDE.md).
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Contributing
 
