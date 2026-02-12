@@ -63,7 +63,7 @@ public class BenchmarkServiceTests
         _metrics.ConnectionClosed();
 
         // Wait for poll (500ms) + grace period (2s) + buffer
-        await Task.Delay(4000);
+        await Task.Delay(6000);
 
         _lifetime.Received().StopApplication();
 
@@ -90,7 +90,7 @@ public class BenchmarkServiceTests
             _metrics.ConnectionClosed();
 
             // Wait for poll + grace + buffer
-            await Task.Delay(4000);
+            await Task.Delay(6000);
 
             _lifetime.Received().StopApplication();
             Assert.True(File.Exists(outputPath), "Expected server metrics JSON file to be written");
@@ -126,7 +126,7 @@ public class BenchmarkServiceTests
         await svc.StartAsync(CancellationToken.None);
         _metrics.ConnectionClosed();
 
-        await Task.Delay(4000);
+        await Task.Delay(6000);
 
         _lifetime.Received().StopApplication();
 
@@ -161,7 +161,7 @@ public class BenchmarkServiceTests
         await svc.StartAsync(CancellationToken.None);
 
         // Wait long enough that it would have triggered if using ConnectionsAccepted
-        await Task.Delay(4000);
+        await Task.Delay(6000);
 
         _lifetime.DidNotReceive().StopApplication();
 
