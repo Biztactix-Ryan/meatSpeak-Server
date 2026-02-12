@@ -138,4 +138,82 @@ public class MessageBuilderTests
         Assert.Equal("testnick", msg.Parameters[0]);
         Assert.Equal("Welcome to the network", msg.Parameters[1]);
     }
+
+    [Fact]
+    public void WriteWithTags_WithTags_PrependsTags()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, "time=2024-01-01T00:00:00.000Z", "nick!user@host", "PRIVMSG", "#channel", "Hello world");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal("@time=2024-01-01T00:00:00.000Z :nick!user@host PRIVMSG #channel :Hello world\r\n", output);
+    }
+
+    [Fact]
+    public void WriteWithTags_NullTags_OmitsTags()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, null, "nick!user@host", "PRIVMSG", "#channel", "Hello world");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":nick!user@host PRIVMSG #channel :Hello world\r\n", output);
+    }
+
+    [Fact]
+    public void WriteWithTags_EmptyTags_OmitsTags()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, "", "nick!user@host", "PRIVMSG", "#channel", "Hello world");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":nick!user@host PRIVMSG #channel :Hello world\r\n", output);
+    }
+
+    [Fact]
+    public void WriteWithTags_MultipleTags_PrependedCorrectly()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, "time=2024-01-01T00:00:00.000Z;batch=abc123", "server", "BATCH", "+abc123", "chathistory");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.StartsWith("@time=2024-01-01T00:00:00.000Z;batch=abc123 ", output);
+        Assert.Contains(":server BATCH +abc123", output);
+    }
+
+    [Fact]
+    public void WriteWithTags_NoPrefix_FormatCorrect()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, "time=2024-01-01T00:00:00.000Z", null, "BATCH", "+ref1", "type");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        // "type" is last param, single word, no space - so no : prefix
+        Assert.Equal("@time=2024-01-01T00:00:00.000Z BATCH +ref1 type\r\n", output);
+    }
+
+    [Fact]
+    public void Roundtrip_WriteWithTagsThenParse_TagsPreserved()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, "time=2024-01-01T00:00:00.000Z", "nick!user@host", "PRIVMSG", "#channel", "Hello world");
+
+        Assert.True(IrcLine.TryParse(new ReadOnlySpan<byte>(buffer, 0, written), out var parts));
+        var msg = parts.ToMessage();
+
+        Assert.Equal("nick!user@host", msg.Prefix);
+        Assert.Equal("PRIVMSG", msg.Command);
+        Assert.Equal("#channel", msg.Parameters[0]);
+        Assert.Equal("Hello world", msg.Parameters[1]);
+        // Tags should also be preserved
+        Assert.NotNull(msg.Tags);
+        var parsedTags = msg.ParsedTags;
+        Assert.True(parsedTags.ContainsKey("time"));
+        Assert.Equal("2024-01-01T00:00:00.000Z", parsedTags["time"]);
+    }
 }

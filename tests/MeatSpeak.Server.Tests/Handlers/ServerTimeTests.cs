@@ -5,9 +5,14 @@ using MeatSpeak.Server.Core.Channels;
 using MeatSpeak.Server.Core.Sessions;
 using MeatSpeak.Server.Core.Server;
 using MeatSpeak.Server.Core.Events;
+using MeatSpeak.Server.Diagnostics;
 using MeatSpeak.Server.Handlers.Messaging;
 using MeatSpeak.Server.Handlers.Channels;
+using MeatSpeak.Server.Handlers.Connection;
+using MeatSpeak.Server.Numerics;
+using MeatSpeak.Server.Registration;
 using MeatSpeak.Server.State;
+using Microsoft.Extensions.Logging;
 
 namespace MeatSpeak.Server.Tests.Handlers;
 
@@ -169,5 +174,119 @@ public class ServerTimeTests
         await target.Received().SendTaggedMessageAsync(
             Arg.Is<string>(t => t.StartsWith("time=")),
             Arg.Any<string>(), "NOTICE", Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task Join_WithServerTimeCap_SendsTaggedMessage()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Existing", new ChannelMembership { Nickname = "Existing" });
+        _channels["#test"] = channel;
+        _server.GetOrCreateChannel("#test").Returns(channel);
+
+        var existing = CreateSession("Existing", serverTime: true);
+        var joiner = CreateSession("Joiner");
+
+        var handler = new JoinHandler(_server);
+        var msg = new IrcMessage(null, null, "JOIN", new[] { "#test" });
+        await handler.HandleAsync(joiner, msg);
+
+        await existing.Received().SendTaggedMessageAsync(
+            Arg.Is<string>(t => t.StartsWith("time=")),
+            Arg.Any<string>(), "JOIN", Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task Nick_WithServerTimeCap_SendsTaggedToSelf()
+    {
+        var session = CreateSession("OldNick", serverTime: true);
+        session.State.Returns(SessionState.Registered);
+
+        var numerics = new NumericSender(_server);
+        var logger = Substitute.For<ILogger<RegistrationPipeline>>();
+        var metrics = new ServerMetrics();
+        var registration = new RegistrationPipeline(_server, numerics, null, logger, metrics);
+        var handler = new NickHandler(_server, registration);
+        var msg = new IrcMessage(null, null, "NICK", new[] { "NewNick" });
+
+        await handler.HandleAsync(session, msg);
+
+        await session.Received().SendTaggedMessageAsync(
+            Arg.Is<string>(t => t.StartsWith("time=")),
+            Arg.Any<string>(), "NICK", Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task Nick_WithServerTimeCap_SendsTaggedToChannelMembers()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Changer", new ChannelMembership { Nickname = "Changer" });
+        channel.AddMember("Viewer", new ChannelMembership { Nickname = "Viewer" });
+        _channels["#test"] = channel;
+
+        var changer = CreateSession("Changer");
+        changer.State.Returns(SessionState.Registered);
+        changer.Info.Channels.Add("#test");
+        var viewer = CreateSession("Viewer", serverTime: true);
+
+        var numerics = new NumericSender(_server);
+        var logger = Substitute.For<ILogger<RegistrationPipeline>>();
+        var metrics = new ServerMetrics();
+        var registration = new RegistrationPipeline(_server, numerics, null, logger, metrics);
+        var handler = new NickHandler(_server, registration);
+        var msg = new IrcMessage(null, null, "NICK", new[] { "NewNick" });
+
+        await handler.HandleAsync(changer, msg);
+
+        await viewer.Received().SendTaggedMessageAsync(
+            Arg.Is<string>(t => t.StartsWith("time=")),
+            Arg.Any<string>(), "NICK",
+            Arg.Is<string[]>(p => p[0] == "NewNick"));
+    }
+
+    [Fact]
+    public async Task Mode_ChannelBroadcast_WithServerTimeCap_SendsTaggedMessage()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Op", new ChannelMembership { Nickname = "Op", IsOperator = true });
+        channel.AddMember("Viewer", new ChannelMembership { Nickname = "Viewer" });
+        _channels["#test"] = channel;
+
+        var modes = new MeatSpeak.Server.Core.Modes.ModeRegistry();
+        modes.RegisterChannelMode(new MeatSpeak.Server.Core.Modes.ModeDefinition('n', MeatSpeak.Server.Core.Modes.ModeType.D, "no-external"));
+        _server.Modes.Returns(modes);
+
+        var op = CreateSession("Op");
+        var viewer = CreateSession("Viewer", serverTime: true);
+        var handler = new ModeHandler(_server);
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#test", "+n" });
+
+        await handler.HandleAsync(op, msg);
+
+        await viewer.Received().SendTaggedMessageAsync(
+            Arg.Is<string>(t => t.StartsWith("time=")),
+            Arg.Any<string>(), "MODE", Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task JoinZero_PartBroadcast_WithServerTimeCap_SendsTaggedMessage()
+    {
+        var channel = new ChannelImpl("#test");
+        channel.AddMember("Leaver", new ChannelMembership { Nickname = "Leaver" });
+        channel.AddMember("Stayer", new ChannelMembership { Nickname = "Stayer" });
+        _channels["#test"] = channel;
+
+        var leaver = CreateSession("Leaver");
+        leaver.Info.Channels.Add("#test");
+        var stayer = CreateSession("Stayer", serverTime: true);
+
+        var handler = new JoinHandler(_server);
+        var msg = new IrcMessage(null, null, "JOIN", new[] { "0" });
+
+        await handler.HandleAsync(leaver, msg);
+
+        await stayer.Received().SendTaggedMessageAsync(
+            Arg.Is<string>(t => t.StartsWith("time=")),
+            Arg.Any<string>(), "PART", Arg.Any<string[]>());
     }
 }

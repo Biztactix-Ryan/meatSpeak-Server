@@ -82,6 +82,26 @@ public class ExtendedJoinTests
     }
 
     [Fact]
+    public async Task Join_JoinerWithExtendedJoin_ReceivesOwnExtendedJoin()
+    {
+        // When the joiner themselves has extended-join, they should also receive the extended format
+        _server.GetOrCreateChannel("#new").Returns(new ChannelImpl("#new"));
+
+        var joiner = CreateSession("Joiner", extendedJoin: true);
+        joiner.Info.Account = "my_account";
+        joiner.Info.Realname = "My Real Name";
+
+        var msg = new IrcMessage(null, null, "JOIN", new[] { "#new" });
+        var handler = new JoinHandler(_server);
+        await handler.HandleAsync(joiner, msg);
+
+        // Joiner receives their own JOIN with extended-join format
+        await joiner.Received().SendMessageAsync(
+            Arg.Any<string>(), "JOIN",
+            Arg.Is<string[]>(p => p.Length == 3 && p[0] == "#new" && p[1] == "my_account" && p[2] == "My Real Name"));
+    }
+
+    [Fact]
     public async Task Join_WithoutExtendedJoin_SendsNormalJoin()
     {
         var existingChannel = new ChannelImpl("#test");
