@@ -188,4 +188,173 @@ public class PingTimeoutServiceTests
         await session.Received().SendMessageAsync(null, "PING",
             Arg.Is<string[]>(p => p.Length > 0 && p[0] == "test.server"));
     }
+
+    [Fact]
+    public async Task EmptySessions_NoErrors()
+    {
+        // No sessions at all — should complete without errors
+        var service = CreateService();
+        await service.CheckSessionsAsync();
+        // Just verifying no exception is thrown
+    }
+
+    [Fact]
+    public async Task DisconnectThrows_OtherSessionsStillProcessed()
+    {
+        // First session throws on disconnect, second should still be processed
+        var bad = CreateSession("Bad", DateTimeOffset.UtcNow.AddSeconds(-200));
+        bad.DisconnectAsync(Arg.Any<string>()).Returns<ValueTask>(_ => throw new InvalidOperationException("connection lost"));
+
+        var good = CreateSession("Good", DateTimeOffset.UtcNow.AddSeconds(-200));
+
+        var service = CreateService();
+        await service.CheckSessionsAsync();
+
+        // Both should have had disconnect attempted
+        await bad.Received().DisconnectAsync(Arg.Any<string>());
+        await good.Received().DisconnectAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task SendPingThrows_OtherSessionsStillProcessed()
+    {
+        // First session throws on PING send, second should still be processed
+        var bad = CreateSession("Bad", DateTimeOffset.UtcNow.AddSeconds(-90));
+        bad.SendMessageAsync(null, "PING", Arg.Any<string[]>())
+            .Returns<ValueTask>(_ => throw new InvalidOperationException("write failed"));
+
+        var good = CreateSession("Good", DateTimeOffset.UtcNow.AddSeconds(-90));
+
+        var service = CreateService();
+        await service.CheckSessionsAsync();
+
+        // Both should have had PING attempted
+        await bad.Received().SendMessageAsync(null, "PING", Arg.Any<string[]>());
+        await good.Received().SendMessageAsync(null, "PING", Arg.Any<string[]>());
+    }
+
+    [Fact]
+    public async Task ConnectingSession_NoPingSent()
+    {
+        // Session in Connecting state (just connected, no data yet) — idle but below Registered
+        var session = CreateSession("Fresh", DateTimeOffset.UtcNow.AddSeconds(-90),
+            state: SessionState.Connecting);
+        var service = CreateService();
+
+        await service.CheckSessionsAsync();
+
+        // Connecting < Registered, so no PING should be sent
+        await session.DidNotReceive().SendMessageAsync(null, "PING", Arg.Any<string[]>());
+        // Within timeout so no disconnect either
+        await session.DidNotReceive().DisconnectAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task CapNegotiatingSession_NoPingSent()
+    {
+        // Session in CAP negotiation — idle but below Registered
+        var session = CreateSession("CapNeg", DateTimeOffset.UtcNow.AddSeconds(-90),
+            state: SessionState.CapNegotiating);
+        var service = CreateService();
+
+        await service.CheckSessionsAsync();
+
+        await session.DidNotReceive().SendMessageAsync(null, "PING", Arg.Any<string[]>());
+        await session.DidNotReceive().DisconnectAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task AuthenticatedSession_ReceivesPing()
+    {
+        // Authenticated > Registered, so should receive PING when idle
+        var session = CreateSession("Authed", DateTimeOffset.UtcNow.AddSeconds(-90),
+            state: SessionState.Authenticated);
+        var service = CreateService();
+
+        await service.CheckSessionsAsync();
+
+        await session.Received().SendMessageAsync(null, "PING", Arg.Any<string[]>());
+        await session.DidNotReceive().DisconnectAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task ConnectingSession_StillTimesOut()
+    {
+        // Even Connecting sessions should be disconnected if past timeout
+        var session = CreateSession("Stale", DateTimeOffset.UtcNow.AddSeconds(-200),
+            state: SessionState.Connecting);
+        var service = CreateService();
+
+        await service.CheckSessionsAsync();
+
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+    }
+
+    [Fact]
+    public async Task CapNegotiatingSession_StillTimesOut()
+    {
+        // CAP negotiation sessions stuck past timeout should be disconnected
+        var session = CreateSession("StuckCap", DateTimeOffset.UtcNow.AddSeconds(-200),
+            state: SessionState.CapNegotiating);
+        var service = CreateService();
+
+        await service.CheckSessionsAsync();
+
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+    }
+
+    [Fact]
+    public void CheckInterval_MinimumTenSeconds()
+    {
+        // PingInterval=1 → checkInterval should be Math.Max(1/2, 10) = 10
+        _server.Config.Returns(new ServerConfig
+        {
+            ServerName = "test.server",
+            PingInterval = 1,
+            PingTimeout = 5,
+        });
+        var service = CreateService();
+
+        // Verify via reflection that _checkInterval is 10 seconds (the minimum)
+        var field = typeof(PingTimeoutService).GetField("_checkInterval",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var checkInterval = (TimeSpan)field!.GetValue(service)!;
+        Assert.Equal(TimeSpan.FromSeconds(10), checkInterval);
+    }
+
+    [Fact]
+    public void CheckInterval_HalfPingInterval()
+    {
+        // PingInterval=60 → checkInterval should be 30
+        var service = CreateService(); // uses default config with PingInterval=60
+
+        var field = typeof(PingTimeoutService).GetField("_checkInterval",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var checkInterval = (TimeSpan)field!.GetValue(service)!;
+        Assert.Equal(TimeSpan.FromSeconds(30), checkInterval);
+    }
+
+    [Fact]
+    public async Task NullNickname_DoesNotThrow()
+    {
+        // Session with null nickname (can happen during early connection)
+        var session = Substitute.For<ISession>();
+        var info = new SessionInfo
+        {
+            Nickname = null,
+            Username = "user",
+            Hostname = "host",
+            LastActivity = DateTimeOffset.UtcNow.AddSeconds(-200),
+        };
+        session.Info.Returns(info);
+        session.Id.Returns("null-nick-id");
+        session.State.Returns(SessionState.Connecting);
+        _sessions[session.Id] = session;
+
+        var service = CreateService();
+        await service.CheckSessionsAsync();
+
+        // Should disconnect without crashing on null nickname in log message
+        await session.Received().DisconnectAsync(Arg.Is<string>(s => s.Contains("Ping timeout")));
+    }
 }
