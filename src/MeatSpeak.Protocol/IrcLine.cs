@@ -20,7 +20,7 @@ public static class IrcLine
         {
             remaining = remaining[1..]; // skip @
             int spaceIdx = remaining.IndexOf(IrcConstants.Space);
-            if (spaceIdx < 0) return false;
+            if (spaceIdx <= 0) return false; // no space found, or empty tags
             parts.Tags = remaining[..spaceIdx];
             remaining = remaining[(spaceIdx + 1)..];
             // Skip extra spaces
@@ -33,7 +33,7 @@ public static class IrcLine
         {
             remaining = remaining[1..]; // skip :
             int spaceIdx = remaining.IndexOf(IrcConstants.Space);
-            if (spaceIdx < 0) return false;
+            if (spaceIdx <= 0) return false; // no space found, or empty prefix
             parts.Prefix = remaining[..spaceIdx];
             remaining = remaining[(spaceIdx + 1)..];
             while (remaining.Length > 0 && remaining[0] == IrcConstants.Space)

@@ -85,7 +85,7 @@ public static class MessageBuilder
             if (pos >= maxPayload) break;
             buffer[pos++] = IrcConstants.Space;
             bool isLast = i == parameters.Length - 1;
-            if (isLast)
+            if (isLast && (parameters[i].Contains(' ') || parameters[i].Length == 0 || parameters[i][0] == ':'))
             {
                 if (pos >= maxPayload) break;
                 buffer[pos++] = IrcConstants.Colon;
