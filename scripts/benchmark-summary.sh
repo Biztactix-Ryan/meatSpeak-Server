@@ -84,9 +84,9 @@ USERS_FAIL=$(( USERS * 9 / 10 ))
 echo "║                                                                  ║"
 echo "║  RELIABILITY                              Value        Status    ║"
 echo "║  ─────────────────────────────────────────────────────────────── ║"
-R1=$(grade "$ERRORS" 0 0 1);                    check "$R1"
+R1=$(grade "$ERRORS" 1 1 1);                     check "$R1"
 printf "║  %-38s %10s     %-4s    ║\n" "Client Errors" "$ERRORS" "$R1"
-R2=$(grade "$SRV_ERRORS" 0 0 1);                check "$R2"
+R2=$(grade "$SRV_ERRORS" 1 1 1);                 check "$R2"
 printf "║  %-38s %10s     %-4s    ║\n" "Server Errors" "$SRV_ERRORS" "$R2"
 if [ "$HAS_SERVER" -eq 1 ]; then
     R3=$(grade "$REGISTERED" "$USERS_WARN" "$USERS_FAIL" 0); check "$R3"
