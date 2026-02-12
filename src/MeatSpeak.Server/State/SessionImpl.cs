@@ -83,20 +83,22 @@ public sealed class SessionImpl : ISession
 
     public void StartCommandProcessing()
     {
-        _ = Task.Run(async () =>
+        _ = ProcessCommandsAsync();
+    }
+
+    private async Task ProcessCommandsAsync()
+    {
+        await foreach (var workItem in _commandQueue.Reader.ReadAllAsync())
         {
-            await foreach (var workItem in _commandQueue.Reader.ReadAllAsync())
+            try
             {
-                try
-                {
-                    await workItem();
-                }
-                catch (Exception)
-                {
-                    // Errors are handled inside the work items
-                }
+                await workItem();
             }
-        });
+            catch (Exception)
+            {
+                // Errors are handled inside the work items
+            }
+        }
     }
 
     public void StopCommandProcessing()
