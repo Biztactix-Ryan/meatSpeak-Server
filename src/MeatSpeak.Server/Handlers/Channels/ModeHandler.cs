@@ -138,11 +138,17 @@ public sealed class ModeHandler : ICommandHandler
         var adding = true;
         int paramIdx = 2;
         var appliedModes = new List<(bool adding, char mode, string? param)>();
+        const int maxModeChanges = 20;
+        int modeChangeCount = 0;
 
         foreach (var c in modeStr)
         {
             if (c == '+') { adding = true; continue; }
             if (c == '-') { adding = false; continue; }
+
+            if (modeChangeCount >= maxModeChanges)
+                break;
+            modeChangeCount++;
 
             switch (c)
             {
@@ -228,7 +234,12 @@ public sealed class ModeHandler : ICommandHandler
         var mask = message.GetParam(paramIdx)!;
         if (adding)
         {
-            channel.AddBan(new BanEntry(mask, session.Info.Nickname!, DateTimeOffset.UtcNow));
+            if (!channel.AddBan(new BanEntry(mask, session.Info.Nickname!, DateTimeOffset.UtcNow), _server.Config.MaxBansPerChannel))
+            {
+                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_BANLISTFULL,
+                    channel.Name, mask, "Channel ban list is full");
+                return;
+            }
             appliedModes.Add((true, 'b', mask));
         }
         else
@@ -260,7 +271,12 @@ public sealed class ModeHandler : ICommandHandler
         var mask = message.GetParam(paramIdx)!;
         if (adding)
         {
-            channel.AddExcept(new BanEntry(mask, session.Info.Nickname!, DateTimeOffset.UtcNow));
+            if (!channel.AddExcept(new BanEntry(mask, session.Info.Nickname!, DateTimeOffset.UtcNow), _server.Config.MaxExceptionsPerChannel))
+            {
+                await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_BANLISTFULL,
+                    channel.Name, mask, "Channel exception list is full");
+                return;
+            }
             appliedModes.Add((true, 'e', mask));
         }
         else

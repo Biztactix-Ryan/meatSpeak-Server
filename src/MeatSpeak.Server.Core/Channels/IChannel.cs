@@ -17,14 +17,15 @@ public interface IChannel
 
     bool AddMember(string nickname, ChannelMembership membership);
     bool RemoveMember(string nickname);
+    bool UpdateMemberNick(string oldNick, string newNick);
     ChannelMembership? GetMember(string nickname);
     bool IsMember(string nickname);
-    void AddBan(BanEntry ban);
+    bool AddBan(BanEntry ban, int maxBans = int.MaxValue);
     bool RemoveBan(string mask);
     bool IsBanned(string mask);
     void AddInvite(string nickname);
     bool IsInvited(string nickname);
-    void AddExcept(BanEntry except);
+    bool AddExcept(BanEntry except, int maxExcepts = int.MaxValue);
     bool RemoveExcept(string mask);
     bool IsExcepted(string mask);
 }

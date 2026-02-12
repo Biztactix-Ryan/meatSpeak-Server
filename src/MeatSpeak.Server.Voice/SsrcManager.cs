@@ -9,9 +9,16 @@ public sealed class SsrcManager
 
     public uint Allocate(string sessionId)
     {
-        var ssrc = Interlocked.Increment(ref _nextSsrc);
-        _ssrcToSession[ssrc] = sessionId;
-        return ssrc;
+        const int maxRetries = 100;
+        for (int i = 0; i < maxRetries; i++)
+        {
+            var ssrc = Interlocked.Increment(ref _nextSsrc);
+            if (ssrc == 0)
+                ssrc = Interlocked.Increment(ref _nextSsrc);
+            if (_ssrcToSession.TryAdd(ssrc, sessionId))
+                return ssrc;
+        }
+        throw new InvalidOperationException("Failed to allocate unique SSRC");
     }
 
     public void Release(uint ssrc) => _ssrcToSession.TryRemove(ssrc, out _);

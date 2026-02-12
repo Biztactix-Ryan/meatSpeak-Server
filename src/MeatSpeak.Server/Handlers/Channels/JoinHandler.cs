@@ -90,7 +90,6 @@ public sealed class JoinHandler : ICommandHandler
     private async ValueTask JoinChannel(ISession session, string name, string? key)
     {
         var nick = session.Info.Nickname!;
-        var isNew = !_server.Channels.TryGetValue(name, out _);
         var channel = _server.GetOrCreateChannel(name);
 
         if (channel.IsMember(nick))
@@ -128,14 +127,13 @@ public sealed class JoinHandler : ICommandHandler
             return;
         }
 
-        // First joiner gets operator status
-        var membership = new ChannelMembership
-        {
-            Nickname = nick,
-            IsOperator = isNew || channel.Members.Count == 0,
-        };
-
+        // Add member first, then determine operator status atomically via member count.
+        // ConcurrentDictionary.TryAdd ensures only one joiner can be sole member.
+        var membership = new ChannelMembership { Nickname = nick };
         channel.AddMember(nick, membership);
+        if (channel.Members.Count == 1)
+            membership.IsOperator = true;
+
         session.Info.Channels.Add(name);
 
         // Broadcast JOIN to all channel members (including sender)
@@ -186,8 +184,8 @@ public sealed class JoinHandler : ICommandHandler
             MsgId = Capabilities.MsgIdGenerator.Generate(),
         }));
 
-        // Persist new channel creation to database
-        if (isNew)
+        // Persist new channel creation to database (first joiner triggers persist)
+        if (channel.Members.Count == 1)
         {
             _writeQueue?.TryWrite(new UpsertChannel(new ChannelEntity
             {

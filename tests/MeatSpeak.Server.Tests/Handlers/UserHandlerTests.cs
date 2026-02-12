@@ -159,7 +159,7 @@ public class UserHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_EmptyUsername_StillSets()
+    public async Task HandleAsync_EmptyUsername_Rejected()
     {
         var session = Substitute.For<ISession>();
         var info = new SessionInfo();
@@ -169,12 +169,14 @@ public class UserHandlerTests
 
         await _handler.HandleAsync(session, msg);
 
-        // Handler doesn't validate content - empty username is accepted
-        Assert.Equal("", info.Username);
+        // Empty username is rejected
+        Assert.Null(info.Username);
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.ERR_NEEDMOREPARAMS,
+            Arg.Any<string[]>());
     }
 
     [Fact]
-    public async Task HandleAsync_LongRealname_StillSets()
+    public async Task HandleAsync_LongRealname_Rejected()
     {
         var session = Substitute.For<ISession>();
         var info = new SessionInfo();
@@ -185,7 +187,9 @@ public class UserHandlerTests
 
         await _handler.HandleAsync(session, msg);
 
-        // Handler doesn't truncate
-        Assert.Equal(longRealname, info.Realname);
+        // Realname over 64 chars is rejected
+        Assert.Null(info.Realname);
+        await session.Received().SendNumericAsync("test.server", IrcNumerics.ERR_NEEDMOREPARAMS,
+            Arg.Any<string[]>());
     }
 }

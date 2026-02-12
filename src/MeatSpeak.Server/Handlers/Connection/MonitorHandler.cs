@@ -74,7 +74,7 @@ public sealed class MonitorHandler : ICommandHandler
 
             var target = _server.FindSessionByNick(nick);
             if (target != null && target.State >= SessionState.Registered)
-                online.Add(target.Info.Prefix);
+                online.Add(target.Info.Nickname!);
             else
                 offline.Add(nick);
         }
@@ -128,7 +128,7 @@ public sealed class MonitorHandler : ICommandHandler
         {
             var target = _server.FindSessionByNick(nick);
             if (target != null && target.State >= SessionState.Registered)
-                online.Add(target.Info.Prefix);
+                online.Add(target.Info.Nickname!);
             else
                 offline.Add(nick);
         }
@@ -162,7 +162,7 @@ public sealed class MonitorHandler : ICommandHandler
             {
                 await CapHelper.SendWithTimestamp(session, server.Config.ServerName,
                     Numerics.Format(Numerics.RPL_MONONLINE),
-                    session.Info.Nickname ?? "*", onlineSession.Info.Prefix);
+                    session.Info.Nickname ?? "*", onlineSession.Info.Nickname!);
             }
         }
     }

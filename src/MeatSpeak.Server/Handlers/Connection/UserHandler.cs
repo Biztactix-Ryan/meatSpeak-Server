@@ -34,8 +34,27 @@ public sealed class UserHandler : ICommandHandler
             return;
         }
 
-        session.Info.Username = message.GetParam(0);
-        session.Info.Realname = message.GetParam(3); // params: username mode unused :realname
+        var username = message.GetParam(0)!;
+        var realname = message.GetParam(3)!;
+
+        // Validate username: non-empty, max 16 chars, no spaces or control chars
+        if (string.IsNullOrEmpty(username) || username.Length > 16 || username.Any(c => c <= 0x20))
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
+                IrcConstants.USER, "Invalid username");
+            return;
+        }
+
+        // Validate realname: non-empty, max 64 chars, no control chars except space
+        if (string.IsNullOrEmpty(realname) || realname.Length > 64 || realname.Any(c => c < 0x20))
+        {
+            await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_NEEDMOREPARAMS,
+                IrcConstants.USER, "Invalid realname");
+            return;
+        }
+
+        session.Info.Username = username;
+        session.Info.Realname = realname; // params: username mode unused :realname
 
         if (session.State < SessionState.Registering)
             session.State = SessionState.Registering;

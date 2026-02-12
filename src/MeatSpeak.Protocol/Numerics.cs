@@ -111,6 +111,7 @@ public static class Numerics
     public const int ERR_INVITEONLYCHAN = 473;
     public const int ERR_BANNEDFROMCHAN = 474;
     public const int ERR_BADCHANNELKEY = 475;
+    public const int ERR_BANLISTFULL = 478;
     public const int ERR_NOPRIVILEGES = 481;
     public const int ERR_CHANOPRIVSNEEDED = 482;
     public const int ERR_NOOPERHOST = 491;

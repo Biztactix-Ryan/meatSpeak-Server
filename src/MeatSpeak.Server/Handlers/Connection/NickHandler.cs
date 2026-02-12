@@ -79,14 +79,8 @@ public sealed class NickHandler : ICommandHandler
             {
                 if (_server.Channels.TryGetValue(channelName, out var channel))
                 {
-                    // Update channel membership key: remove old nick, re-add with new nick
-                    var membership = channel.GetMember(oldNick);
-                    if (membership != null)
-                    {
-                        channel.RemoveMember(oldNick);
-                        membership.Nickname = newNick;
-                        channel.AddMember(newNick, membership);
-                    }
+                    // Atomically update channel membership key
+                    channel.UpdateMemberNick(oldNick, newNick);
 
                     foreach (var (memberNick, _) in channel.Members)
                     {

@@ -81,15 +81,29 @@ public sealed class ChannelImpl : IChannel
     public bool RemoveMember(string nickname)
         => _members.TryRemove(nickname, out _);
 
+    public bool UpdateMemberNick(string oldNick, string newNick)
+    {
+        if (!_members.TryRemove(oldNick, out var membership))
+            return false;
+        membership.Nickname = newNick;
+        _members[newNick] = membership;
+        return true;
+    }
+
     public ChannelMembership? GetMember(string nickname)
         => _members.TryGetValue(nickname, out var m) ? m : null;
 
     public bool IsMember(string nickname)
         => _members.ContainsKey(nickname);
 
-    public void AddBan(BanEntry ban)
+    public bool AddBan(BanEntry ban, int maxBans = int.MaxValue)
     {
-        lock (_lock) _bans.Add(ban);
+        lock (_lock)
+        {
+            if (_bans.Count >= maxBans) return false;
+            _bans.Add(ban);
+            return true;
+        }
     }
 
     public bool RemoveBan(string mask)
@@ -117,9 +131,14 @@ public sealed class ChannelImpl : IChannel
         lock (_lock) return _invites.Contains(nickname);
     }
 
-    public void AddExcept(BanEntry except)
+    public bool AddExcept(BanEntry except, int maxExcepts = int.MaxValue)
     {
-        lock (_lock) _excepts.Add(except);
+        lock (_lock)
+        {
+            if (_excepts.Count >= maxExcepts) return false;
+            _excepts.Add(except);
+            return true;
+        }
     }
 
     public bool RemoveExcept(string mask)

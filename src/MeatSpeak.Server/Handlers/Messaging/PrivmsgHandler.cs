@@ -63,6 +63,18 @@ public sealed class PrivmsgHandler : ICommandHandler
                 return;
             }
 
+            // Enforce moderated mode (+m): only ops and voiced users can speak
+            if (channel.Modes.Contains('m'))
+            {
+                var member = channel.GetMember(session.Info.Nickname!);
+                if (member is not { IsOperator: true } and not { HasVoice: true })
+                {
+                    await session.SendNumericAsync(_server.Config.ServerName, Numerics.ERR_CANNOTSENDTOCHAN,
+                        target, "Cannot send to channel");
+                    return;
+                }
+            }
+
             // Send to all channel members except sender
             var broadcastStart = ServerMetrics.GetTimestamp();
             foreach (var (nick, _) in channel.Members)

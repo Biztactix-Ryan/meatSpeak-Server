@@ -39,6 +39,14 @@ public sealed class NoticeHandler : ICommandHandler
             if (!_server.Channels.TryGetValue(target, out var channel)) return;
             if (!channel.IsMember(session.Info.Nickname!)) return;
 
+            // Enforce moderated mode (+m): silently drop for non-ops/non-voiced (NOTICE per RFC)
+            if (channel.Modes.Contains('m'))
+            {
+                var member = channel.GetMember(session.Info.Nickname!);
+                if (member is not { IsOperator: true } and not { HasVoice: true })
+                    return;
+            }
+
             var broadcastStart = ServerMetrics.GetTimestamp();
             foreach (var (nick, _) in channel.Members)
             {

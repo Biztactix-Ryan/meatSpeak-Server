@@ -103,6 +103,19 @@ public sealed class ServerState : IServer
             while (list.Count > MaxWhowasEntries)
                 list.RemoveLast();
         }
+
+        // Bound the total number of tracked nicknames
+        var maxNicks = Config.MaxWhowasNicknames;
+        if (_whowas.Count > maxNicks)
+        {
+            foreach (var key in _whowas.Keys)
+            {
+                if (string.Equals(key, entry.Nickname, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (_whowas.TryRemove(key, out _))
+                    break;
+            }
+        }
     }
 
     public IReadOnlyList<WhowasEntry> GetWhowas(string nickname, int maxCount = 10)

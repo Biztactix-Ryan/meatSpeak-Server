@@ -364,6 +364,8 @@ public sealed class ChatHistoryHandler : ICommandHandler
                         break;
                     case "KICK":
                         // Message stored as "targetNick reason"
+                        if (string.IsNullOrEmpty(msg.Message))
+                            break;
                         var spaceIdx = msg.Message.IndexOf(' ');
                         if (spaceIdx > 0)
                             await session.SendTaggedMessageAsync(tags, prefix, IrcConstants.KICK, msgTarget, msg.Message[..spaceIdx], msg.Message[(spaceIdx + 1)..]);

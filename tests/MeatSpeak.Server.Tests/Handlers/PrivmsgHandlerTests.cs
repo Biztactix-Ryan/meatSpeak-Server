@@ -168,7 +168,7 @@ public class PrivmsgHandlerTests
 
     // --- New edge case tests ---
 
-    [Fact(Skip = "PRIVMSG handler does not yet enforce +m (moderated) mode - needs handler update")]
+    [Fact]
     public async Task HandleAsync_ModeratedChannel_NonVoicedNonOp_SendsCannotSend()
     {
         var channel = new ChannelImpl("#test");
@@ -186,7 +186,7 @@ public class PrivmsgHandlerTests
             Arg.Any<string[]>());
     }
 
-    [Fact(Skip = "PRIVMSG handler does not yet enforce +m (moderated) mode - needs handler update")]
+    [Fact]
     public async Task HandleAsync_ModeratedChannel_VoicedUser_CanSend()
     {
         var channel = new ChannelImpl("#test");
@@ -207,7 +207,7 @@ public class PrivmsgHandlerTests
             Arg.Is<string[]>(p => p[0] == "#test" && p[1] == "Voiced user msg"));
     }
 
-    [Fact(Skip = "PRIVMSG handler does not yet enforce +m (moderated) mode - needs handler update")]
+    [Fact]
     public async Task HandleAsync_ModeratedChannel_OpUser_CanSend()
     {
         var channel = new ChannelImpl("#test");

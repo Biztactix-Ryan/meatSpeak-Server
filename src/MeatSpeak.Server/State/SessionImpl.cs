@@ -27,7 +27,7 @@ public sealed class SessionImpl : ISession
     {
         _connection = connection;
         _serverName = serverName;
-        Info.Hostname = connection.RemoteEndPoint?.ToString()?.Split(':')[0] ?? "unknown";
+        Info.Hostname = (connection.RemoteEndPoint as System.Net.IPEndPoint)?.Address.ToString() ?? "unknown";
     }
 
     public ValueTask SendAsync(ReadOnlyMemory<byte> data, CancellationToken ct = default)
@@ -71,15 +71,14 @@ public sealed class SessionImpl : ISession
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask DisconnectAsync(string? reason = null)
+    public async ValueTask DisconnectAsync(string? reason = null)
     {
         State = SessionState.Disconnecting;
         if (reason != null)
         {
             var errorMsg = $"ERROR :Closing Link: {Info.Hostname} ({reason})";
-            SendLineAsync(errorMsg).AsTask().Wait();
+            await SendLineAsync(errorMsg);
         }
         _connection.Disconnect();
-        return ValueTask.CompletedTask;
     }
 }
