@@ -200,4 +200,164 @@ public class VoicePacketTests
         Assert.False(packet.HasSpatial);
         Assert.False(packet.HasPriority);
     }
+
+    // --- Edge case tests ---
+
+    [Theory]
+    [InlineData(VoicePacketType.Audio, 0x01)]
+    [InlineData(VoicePacketType.Keepalive, 0x02)]
+    [InlineData(VoicePacketType.MediaHeader, 0x03)]
+    public void TryParse_AllPacketTypes_ParseCorrectly(VoicePacketType type, byte expectedByte)
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = expectedByte;
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(type, packet.Type);
+    }
+
+    [Fact]
+    public void TryParse_UnknownPacketType_StillParses()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = 0xFF; // unknown type
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.Equal((VoicePacketType)0xFF, packet.Type);
+    }
+
+    [Fact]
+    public void TryParse_MaxSsrc_ParsedCorrectly()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(3), uint.MaxValue);
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(uint.MaxValue, packet.Ssrc);
+    }
+
+    [Fact]
+    public void TryParse_MaxSequence_ParsedCorrectly()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        BinaryPrimitives.WriteUInt16BigEndian(data.AsSpan(7), ushort.MaxValue);
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(ushort.MaxValue, packet.Sequence);
+    }
+
+    [Fact]
+    public void TryParse_MaxTimestamp_ParsedCorrectly()
+    {
+        var data = new byte[VoicePacket.HeaderSize];
+        data[0] = VoicePacket.CurrentVersion;
+        BinaryPrimitives.WriteUInt32BigEndian(data.AsSpan(9), uint.MaxValue);
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(uint.MaxValue, packet.Timestamp);
+    }
+
+    [Fact]
+    public void TryParse_LargePayload_ParsedCorrectly()
+    {
+        var data = new byte[VoicePacket.HeaderSize + 1500];
+        data[0] = VoicePacket.CurrentVersion;
+        data[1] = (byte)VoicePacketType.Audio;
+        // Fill payload with pattern
+        for (int i = VoicePacket.HeaderSize; i < data.Length; i++)
+            data[i] = (byte)(i & 0xFF);
+
+        var result = VoicePacket.TryParse(data, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(1500, packet.Payload.Length);
+        Assert.Equal((byte)(VoicePacket.HeaderSize & 0xFF), packet.Payload[0]);
+    }
+
+    [Fact]
+    public void Write_EmptyPayload_WritesHeaderOnly()
+    {
+        var buffer = new byte[VoicePacket.HeaderSize];
+
+        int written = VoicePacket.Write(buffer, VoicePacketType.Keepalive, VoicePacketFlags.None, 1, 1, 1, ReadOnlySpan<byte>.Empty);
+
+        Assert.Equal(VoicePacket.HeaderSize, written);
+    }
+
+    [Fact]
+    public void Write_ExactFitBuffer_Succeeds()
+    {
+        var payload = new byte[] { 0xAA, 0xBB };
+        var buffer = new byte[VoicePacket.HeaderSize + payload.Length]; // exact fit
+
+        int written = VoicePacket.Write(buffer, VoicePacketType.Audio, VoicePacketFlags.None, 1, 1, 1, payload);
+
+        Assert.Equal(VoicePacket.HeaderSize + payload.Length, written);
+    }
+
+    [Theory]
+    [InlineData(VoicePacketType.Audio, 0x01)]
+    [InlineData(VoicePacketType.Keepalive, 0x02)]
+    [InlineData(VoicePacketType.MediaHeader, 0x03)]
+    public void Write_AllPacketTypes_WriteCorrectTypeByte(VoicePacketType type, byte expectedByte)
+    {
+        var buffer = new byte[VoicePacket.HeaderSize];
+
+        int written = VoicePacket.Write(buffer, type, VoicePacketFlags.None, 0, 0, 0, ReadOnlySpan<byte>.Empty);
+
+        Assert.Equal(VoicePacket.HeaderSize, written);
+        Assert.Equal(expectedByte, buffer[1]);
+    }
+
+    [Fact]
+    public void WriteThenParse_SequenceWraparound_Roundtrips()
+    {
+        var buffer = new byte[VoicePacket.HeaderSize];
+
+        VoicePacket.Write(buffer, VoicePacketType.Audio, VoicePacketFlags.None, 1, ushort.MaxValue, 1, ReadOnlySpan<byte>.Empty);
+
+        var result = VoicePacket.TryParse(buffer, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(ushort.MaxValue, packet.Sequence);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void WriteThenParse_AllFlagCombinations_Roundtrip(byte flagByte)
+    {
+        var flags = (VoicePacketFlags)flagByte;
+        var buffer = new byte[VoicePacket.HeaderSize];
+
+        VoicePacket.Write(buffer, VoicePacketType.Audio, flags, 42, 100, 200, ReadOnlySpan<byte>.Empty);
+
+        var result = VoicePacket.TryParse(buffer, out var packet);
+
+        Assert.True(result);
+        Assert.Equal(flags, packet.Flags);
+        Assert.Equal(42u, packet.Ssrc);
+        Assert.Equal((ushort)100, packet.Sequence);
+        Assert.Equal(200u, packet.Timestamp);
+    }
 }

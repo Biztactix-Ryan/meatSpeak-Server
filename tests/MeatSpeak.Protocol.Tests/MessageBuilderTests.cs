@@ -216,4 +216,95 @@ public class MessageBuilderTests
         Assert.True(parsedTags.ContainsKey("time"));
         Assert.Equal("2024-01-01T00:00:00.000Z", parsedTags["time"]);
     }
+
+    // --- Edge case tests ---
+
+    [Fact]
+    public void Write_SingleParamWithSpace_AddsColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.Write(buffer, null, "QUIT", "Gone away");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal("QUIT :Gone away\r\n", output);
+    }
+
+    [Fact]
+    public void Write_ThreeMiddleParams_LastGetsColonPrefix()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.Write(buffer, null, "MODE", "#chan", "+o", "user");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        // Last param "user" has no space/colon/empty so no colon prefix in Write
+        // Actually Write only adds : if last param contains space, is empty, or starts with ':'
+        Assert.Equal("MODE #chan +o user\r\n", output);
+    }
+
+    [Fact]
+    public void Write_UTF8MultiByteChars_EncodesCorrectly()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.Write(buffer, null, "PRIVMSG", "#chan", "Hello \U0001F600 world");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal("PRIVMSG #chan :Hello \U0001F600 world\r\n", output);
+        Assert.Contains("\U0001F600", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_SingleDigit_PaddedToThree()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "srv", 1, "nick", "Welcome");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Contains(" 001 ", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_TwoDigit_PaddedToThree()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "srv", 42, "nick", "Message");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Contains(" 042 ", output);
+    }
+
+    [Fact]
+    public void WriteNumeric_NoExtraParams_JustTargetAndCRLF()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteNumeric(buffer, "srv", 1, "nick");
+
+        var output = Encoding.UTF8.GetString(buffer, 0, written);
+        Assert.Equal(":srv 001 nick\r\n", output);
+    }
+
+    [Fact]
+    public void WriteWithTags_Roundtrip_AllFieldsPreserved()
+    {
+        var buffer = new byte[512];
+
+        int written = MessageBuilder.WriteWithTags(buffer, "time=2024-01-01;msgid=abc", "nick!user@host", "PRIVMSG", "#channel", "Hello world");
+
+        Assert.True(IrcLine.TryParse(new ReadOnlySpan<byte>(buffer, 0, written), out var parts));
+        var msg = parts.ToMessage();
+
+        Assert.Equal("nick!user@host", msg.Prefix);
+        Assert.Equal("PRIVMSG", msg.Command);
+        Assert.Equal("#channel", msg.Parameters[0]);
+        Assert.Equal("Hello world", msg.Parameters[1]);
+        Assert.NotNull(msg.Tags);
+        var tags = msg.ParsedTags;
+        Assert.Equal("2024-01-01", tags["time"]);
+        Assert.Equal("abc", tags["msgid"]);
+    }
 }

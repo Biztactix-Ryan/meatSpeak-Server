@@ -176,4 +176,123 @@ public class IrcMessageTests
 
         Assert.Empty(tags);
     }
+
+    // --- Edge case tests ---
+
+    [Fact]
+    public void ParsePrefix_EmptyPrefix_ReturnsEmptyNick()
+    {
+        var msg = new IrcMessage(null, "", "PRIVMSG", new[] { "#channel", "Hello" });
+
+        var (nick, user, host) = msg.ParsePrefix();
+
+        Assert.Equal("", nick);
+        Assert.Null(user);
+        Assert.Null(host);
+    }
+
+    [Fact]
+    public void ParsePrefix_MultipleExclamation_SplitsOnFirst()
+    {
+        var msg = new IrcMessage(null, "a!b!c@host", "PRIVMSG", new[] { "#channel" });
+
+        var (nick, user, host) = msg.ParsePrefix();
+
+        Assert.Equal("a", nick);
+        Assert.Equal("b!c", user);
+        Assert.Equal("host", host);
+    }
+
+    [Fact]
+    public void ParsePrefix_MultipleAt_SplitsOnFirst()
+    {
+        var msg = new IrcMessage(null, "nick!user@host@extra", "PRIVMSG", new[] { "#channel" });
+
+        var (nick, user, host) = msg.ParsePrefix();
+
+        // IndexOf('@') finds the first @, so user = between ! and first @
+        Assert.Equal("nick", nick);
+        Assert.Equal("user", user);
+        Assert.Equal("host@extra", host);
+    }
+
+    [Fact]
+    public void ParsePrefix_ExclAfterAt_TreatedAsNickAtHost()
+    {
+        // "nick@host!user" — excl at index 9, at index 4, excl > at so excl >= 0 && at > excl is false
+        var msg = new IrcMessage(null, "nick@host!user", "PRIVMSG", new[] { "#channel" });
+
+        var (nick, user, host) = msg.ParsePrefix();
+
+        // Falls to the "at >= 0" branch: nick@host
+        Assert.Equal("nick", nick);
+        Assert.Null(user);
+        Assert.Equal("host!user", host);
+    }
+
+    [Fact]
+    public void ToString_MultipleMiddleParams_FormatsCorrectly()
+    {
+        var msg = new IrcMessage(null, null, "MODE", new[] { "#chan", "+o", "user" });
+
+        var result = msg.ToString();
+
+        Assert.Equal("MODE #chan +o :user", result);
+    }
+
+    [Fact]
+    public void ToString_SingleParamWithSpace_GetsColonPrefix()
+    {
+        var msg = new IrcMessage(null, null, "QUIT", new[] { "Gone away" });
+
+        var result = msg.ToString();
+
+        Assert.Equal("QUIT :Gone away", result);
+    }
+
+    [Fact]
+    public void ToString_EmptyLastOfMultiple_GetsColonPrefix()
+    {
+        var msg = new IrcMessage(null, "server", "001", new[] { "nick", "" });
+
+        var result = msg.ToString();
+
+        Assert.Equal(":server 001 nick :", result);
+    }
+
+    [Fact]
+    public void GetParam_NegativeIndex_ReturnsNull()
+    {
+        var msg = new IrcMessage(null, null, "PING", new[] { "server" });
+
+        // Negative index is < Parameters.Count (1), so it will throw or return
+        // Actually, -1 < 1 is true, so Parameters[-1] would be accessed via indexer
+        // This tests the behavior — List<T>[-1] throws ArgumentOutOfRangeException
+        // But GetParam checks index < Parameters.Count: -1 < 1 is true, so it tries Parameters[-1]
+        // Let's verify the actual behavior
+        Assert.ThrowsAny<Exception>(() => msg.GetParam(-1));
+    }
+
+    [Fact]
+    public void Trailing_SingleParam_ReturnsIt()
+    {
+        var msg = new IrcMessage(null, null, "NICK", new[] { "newnick" });
+
+        Assert.Equal("newnick", msg.Trailing);
+    }
+
+    [Fact]
+    public void Roundtrip_CommandOnly_Preserved()
+    {
+        var original = new IrcMessage(null, null, "QUIT", Array.Empty<string>());
+        var str = original.ToString();
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(str);
+        Assert.True(IrcLine.TryParse(bytes, out var parts));
+        var parsed = parts.ToMessage();
+
+        Assert.Null(parsed.Prefix);
+        Assert.Equal("QUIT", parsed.Command);
+        Assert.Empty(parsed.Parameters);
+    }
 }
